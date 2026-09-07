@@ -5,12 +5,12 @@ Chat, query rewriting and the evaluation judge all speak to models through
 rather than a code change. Providers are responsible for their own
 credential checks, error translation, token accounting and cost estimation.
 
-A note on determinism: current Claude models (Opus 5, Sonnet 5, the 4.7/4.8
-family) removed the sampling parameters — sending ``temperature`` returns a
-400. Reproducibility for evaluation therefore comes from fixed prompts, a
-pinned model id and a fixed reasoning effort, all of which are recorded in
-every eval run. ``temperature`` is still forwarded to models that accept it
-(OpenAI, older Claude models).
+A note on determinism: current Claude models removed the sampling parameters,
+and the current Anthropic SDK no longer accepts ``temperature`` at all, so the
+Anthropic provider never sends it. Reproducibility for evaluation therefore
+comes from fixed prompts, a pinned model id and a fixed reasoning effort, all
+of which are recorded in every eval run. ``temperature`` is still forwarded to
+OpenAI, which accepts it.
 """
 
 from __future__ import annotations
@@ -40,21 +40,6 @@ PRICING: dict[str, tuple[float, float]] = {
     "gpt-4o": (2.50, 10.00),
     "gpt-4o-mini": (0.15, 0.60),
 }
-
-# Claude models that removed temperature/top_p/top_k (sending them is a 400).
-_NO_SAMPLING_PREFIXES = (
-    "claude-opus-5",
-    "claude-opus-4-7",
-    "claude-opus-4-8",
-    "claude-sonnet-5",
-    "claude-fable-5",
-    "claude-mythos-5",
-)
-
-
-def _supports_sampling(model: str) -> bool:
-    return not model.startswith(_NO_SAMPLING_PREFIXES)
-
 
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """Estimated USD for one call. Unknown models return 0.0 rather than guess."""
@@ -202,6 +187,9 @@ class AnthropicProvider(LLMProvider):
         effort: str = "medium",
         temperature: float | None = None,
     ) -> LLMResponse:
+        # `temperature` is deliberately never sent: the current Anthropic SDK
+        # has removed the sampling parameters, and current models reject them.
+        # Reasoning depth is controlled by `output_config.effort` instead.
         kwargs: dict[str, Any] = {
             "model": self.model,
             "max_tokens": max_tokens,
@@ -209,8 +197,6 @@ class AnthropicProvider(LLMProvider):
             "messages": messages,
             "output_config": {"effort": effort},
         }
-        if temperature is not None and _supports_sampling(self.model):
-            kwargs["temperature"] = temperature
 
         started = time.perf_counter()
         try:

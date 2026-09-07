@@ -177,3 +177,29 @@ def test_missing_api_key_raises_an_actionable_error(monkeypatch, episodes):
         get_provider("chat", settings)
     assert isinstance(exc.value, CompanionError)
     assert ".env" in (exc.value.remedy or "")
+
+
+def test_anthropic_provider_never_sends_temperature():
+    """The current SDK has removed the sampling parameters entirely.
+
+    Passing `temperature` through would raise a TypeError at call time, so the
+    provider must drop it regardless of what a caller asks for.
+    """
+    import inspect
+
+    import anthropic
+
+    accepted = set(
+        inspect.signature(
+            anthropic.Anthropic(api_key="dummy").messages.create
+        ).parameters
+    )
+    assert "temperature" not in accepted, (
+        "the SDK now accepts temperature again — revisit AnthropicProvider"
+    )
+    assert {"model", "max_tokens", "system", "messages", "output_config"} <= accepted
+
+    source = inspect.getsource(
+        __import__("companion.chat.providers", fromlist=["x"]).AnthropicProvider
+    )
+    assert 'kwargs["temperature"]' not in source
