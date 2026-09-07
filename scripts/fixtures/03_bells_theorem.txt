@@ -1,0 +1,37 @@
+Welcome back to Great Papers. Today we are looking at a paper that is four pages long, published in nineteen sixty four in an obscure journal that went out of business almost immediately, and which I would argue is one of the most important papers in the history of physics. The paper is called On the Einstein Podolsky Rosen Paradox. The author is John Stewart Bell, and he was, at the time, a particle physicist at CERN doing this in his spare time.
+
+To understand what Bell did, we need to go back to nineteen thirty five. Einstein, Boris Podolsky and Nathan Rosen publish a paper arguing that quantum mechanics must be incomplete. That is the E P R paper. Their argument goes roughly like this. Take two particles that interact and then fly apart. Quantum mechanics says they can be in what Schrodinger called an entangled state. Measure a property of one, and you instantly know the corresponding property of the other, no matter how far apart they are.
+
+Einstein's objection was not that this is weird. His objection was that it looks like either there is some spooky action at a distance, which would conflict with relativity, or the information was there all along and quantum mechanics simply does not describe it. Einstein preferred the second option. He thought there must be additional variables, hidden variables, that determine the outcomes in advance, and that quantum mechanics gives you only a statistical summary because it does not track them.
+
+That was the state of the argument for nearly thirty years. And crucially, everybody thought it was philosophy. Two pictures of reality, same predictions, no experiment could tell them apart.
+
+Bell's paper shows that is false.
+
+Here is the move, and it is beautiful. Bell does not argue about interpretation. He asks: suppose Einstein is right. Suppose the outcomes are determined in advance by some hidden variables, whatever they are, and suppose that what happens at one detector cannot influence what happens at the other, because they are far apart and the measurements are made close together in time. Call that second assumption locality. Bell says: I do not need to know what the hidden variables are. I do not need a specific theory. I just need those two assumptions.
+
+And from those assumptions alone, he derives a constraint. If you measure the two particles along various different axes and look at the correlations between the results, then a certain combination of those correlations has to stay within a fixed bound. That is Bell's inequality.
+
+Then he shows that quantum mechanics predicts a violation of that bound. For certain choices of measurement angles, the correlations quantum mechanics predicts are stronger than any local hidden variable theory can produce.
+
+So the two pictures do not make the same predictions after all. It is not philosophy. It is an experiment.
+
+Let me be careful about what the assumptions actually are, because this gets misreported constantly. Bell needs realism, roughly the idea that the measurement outcomes are determined by properties the particles carry with them, and locality, that no influence travels faster than light between the two measurement events. There is a third assumption that is usually left implicit, which is that the experimenters can choose their measurement settings freely and independently of the hidden variables. That is sometimes called measurement independence or the freedom of choice assumption. If you are willing to give that one up, you can evade the theorem, and that loophole is called superdeterminism. Almost nobody takes it seriously, but it is worth knowing it is there, because it tells you the theorem is genuinely a statement about assumptions and not a proof that reality is one particular way.
+
+What happened experimentally? The first serious test was by Freedman and Clauser in nineteen seventy two. Then Alain Aspect and collaborators in the early nineteen eighties did much better experiments, including one where the measurement settings were changed while the particles were in flight, which closes what people call the locality loophole. And then over the following decades people closed the other loopholes one by one. In twenty fifteen there were several so called loophole free tests, and the answer every single time has been the same: the inequality is violated, and it is violated by exactly the amount quantum mechanics predicts.
+
+So Einstein was wrong, in a very specific sense. You cannot have both locality and hidden variables that determine outcomes in advance. Nature does not work that way.
+
+Now, I want to say something about what this does not mean, because it gets overstated. It does not mean you can send signals faster than light. The correlations only show up when you bring the two sets of results together and compare them, and each set on its own looks like random noise. There is a result called the no signalling theorem that makes this precise. So relativity is safe.
+
+Here is what I want to connect back to our other episodes.
+
+Think about what noise means here. When we did Shannon, noise was uncertainty about what was sent, given what was received. It was a statement about our ignorance of the channel. Shannon's whole framework treats uncertainty as something that could in principle be reduced if you knew more. What Bell shows is that in quantum mechanics there is a kind of uncertainty that is not like that. It is not that the outcome was determined and we did not know it. Bell's theorem rules out a large class of theories in which that would be true. The randomness is not ignorance about a pre existing fact.
+
+And think about Planck. Planck introduced discreteness as an accounting device and did not believe it. Sixty four years later Bell is showing that if you take the quantum formalism completely seriously, it makes claims about the structure of reality that are testable and that rule out the classical picture Einstein wanted to keep. That is a long arc, and it runs directly from that December nineteen hundred paper to this one.
+
+There is one more thing about Bell himself I want to mention, because I think it says something about how science works. Bell personally sympathised with Einstein. He was not trying to defend orthodox quantum mechanics. He found the standard interpretation unsatisfying and he was drawn to hidden variable theories, in particular David Bohm's version from nineteen fifty two, which is explicitly non local. Bell's paper is in a real sense a person trying to find out whether the view he preferred could survive, discovering that a large part of it could not, and publishing that. That is the job.
+
+Let me close with the thing I think is the actual lesson. For thirty years, extremely clever people thought a question was purely interpretive, a matter of taste, unanswerable by experiment. Bell showed it was an empirical question, and he did it not by building a better apparatus but by thinking more carefully about what the competing positions actually committed you to. Sometimes the bottleneck is not data. Sometimes it is that nobody has worked out what would distinguish the options.
+
+That is Bell, nineteen sixty four. On the Einstein Podolsky Rosen Paradox. Four pages that turned a philosophical dispute into a laboratory measurement. Thanks for listening to Great Papers.

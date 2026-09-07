@@ -1,0 +1,37 @@
+Welcome back to Great Papers, the show where we read one landmark scientific paper and try to understand what its author was actually thinking. I'm your host, and today we are going all the way back to the fourteenth of December, nineteen hundred. Max Planck stands up in front of the German Physical Society in Berlin and reads a short paper. And in that paper, almost by accident, he starts quantum mechanics.
+
+Let me set the scene, because the problem Planck was working on sounds incredibly boring until you understand why it mattered. The problem is called blackbody radiation. Here is the idea. Take any object and heat it up. It glows. A poker in a fire goes from dull red, to orange, to yellow, to white as it gets hotter. That is not a coincidence of pokers. Every object at every temperature radiates light, and the colour of that light depends only on the temperature. Not on what the object is made of. Not on its shape. Only temperature. Physicists in the eighteen nineties wanted a formula. Give me the temperature, and I will tell you exactly how much light comes out at every wavelength.
+
+They could not get it. And the way they failed is one of the great embarrassments in the history of physics. If you take classical physics, the physics of Newton and Maxwell, and you apply it honestly to this problem, you get an answer that says the object should radiate infinite energy. Infinite. Mostly at short wavelengths, at the ultraviolet end. That result got a nickname: the ultraviolet catastrophe. And I want to be careful here, because the nickname came later, from Paul Ehrenfest in nineteen eleven, but the problem itself was very much alive in the eighteen nineties.
+
+Now, Planck was forty two years old. He was, by temperament, the most conservative physicist you could imagine. He believed deeply in thermodynamics. He was not looking to overthrow anything. He spent six years on this problem, from eighteen ninety four onward, trying to derive the radiation law from first principles.
+
+In October of nineteen hundred, he found the formula. And he found it, essentially, by guessing. He had two formulas that each worked in half of the range. Wien's law worked at short wavelengths. The Rayleigh-Jeans expression worked at long wavelengths. Planck interpolated between them. He wrote down a mathematical expression that reduced to one in one limit and the other in the other limit. And when the experimentalists checked it, it fit the data perfectly. Beautifully. Across the whole spectrum.
+
+So he had the right answer and no idea why it was right.
+
+That is what the December paper is about. Planck went looking for a derivation, and he found one, but only by making an assumption he described later as an act of desperation. The assumption is this. He imagined the walls of the cavity as full of tiny oscillators, little resonators that absorb and emit light. And he assumed that these oscillators could not have just any energy. Their energy had to come in discrete lumps. Whole number multiples of a basic unit. And the size of that unit was proportional to the frequency of the oscillator.
+
+Energy equals h times f. The frequency, multiplied by a new constant of nature.
+
+That constant is what we now call Planck's constant. He called it the quantum of action. And its value is tiny. Roughly six point six two six times ten to the minus thirty four, in units of joule seconds. That smallness is exactly why nobody had noticed. In everyday life the lumps are so small that energy looks perfectly smooth and continuous.
+
+Here is what I find genuinely moving about this story. Planck did not believe it. He did not think energy was really lumpy. He thought this was a mathematical trick, a bookkeeping device he had used to count states so he could apply Boltzmann's statistical method, and he expected that someone would later find a way to derive the same formula without it. He spent years trying to do exactly that himself. He called it, and I am quoting him here, an act of desperation. He was, in his own words, ready to sacrifice any of his previous convictions about physics.
+
+And notice what he had to sacrifice. Planck had spent his career resisting Boltzmann's statistical interpretation of entropy. He wanted thermodynamics to be absolute, not statistical. And to make this work, he had to adopt Boltzmann's method. He had to count microstates. He had to treat entropy as a matter of counting arrangements. That is a real intellectual concession, and he made it because the numbers demanded it.
+
+So what happened next? Almost nothing, for about five years. The physics community accepted Planck's formula because it fit the data, and quietly ignored the strange assumption underneath it. It took Einstein, in nineteen oh five, to say the uncomfortable thing out loud: that maybe light itself comes in quanta, not just the oscillators in the wall. That is the photoelectric effect paper, and that is the one that got Einstein his Nobel Prize.
+
+Let me pull out three things I think are worth carrying away from this paper.
+
+The first is about the relationship between fitting data and understanding it. Planck had a formula that worked in October and a reason it worked in December, and those are genuinely different achievements. The formula was interpolation. The derivation was physics. We sometimes talk as though getting the right numbers is the whole job. Planck clearly did not think so, or he would have stopped in October.
+
+The second is about discreteness. The deep move here is the idea that a physical quantity that looks continuous might actually be built out of indivisible units. Energy comes in packets. That idea turns out to be the single most productive idea of twentieth century physics, and it arrived as a reluctant accounting trick.
+
+The third is about how slowly revolutions actually happen. We tell the story as though nineteen hundred is a bright line. It was not. Planck himself resisted his own result for over a decade. The community took years to absorb it. The word quantum did not become a research programme until Bohr's atom in nineteen thirteen. Real change is slow and reluctant and full of people arguing.
+
+One more thing before we close. It is worth noticing what kind of constant h is. It is not a property of any particular material. It is not a property of the cavity. It shows up in a formula that is supposed to be universal, independent of what the object is made of. So h is a property of the world. It sets a scale. Below that scale, the smooth continuous picture of classical physics simply stops being the right description. Planck himself, in later years, understood this. He proposed a system of natural units built out of h, the speed of light, and the gravitational constant. Those are still called Planck units today.
+
+We will come back to that, because when we do the Bell's theorem episode, we are going to see what happens when you take the quantum picture completely seriously and ask what it says about reality itself. And when we look at Shannon and information theory, we will see another case of somebody taking something that looked continuous and fuzzy, and showing that it has a discrete unit underneath.
+
+That is the paper. Fourteenth of December, nineteen hundred. Max Planck, an act of desperation, and the constant that carries his name. Thanks for listening to Great Papers.

@@ -1,0 +1,41 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Audio — the supplied episodes are not ours to redistribute.
+# Fixture scripts under scripts/fixtures/ ARE committed so the synthetic
+# development audio is reproducible with `make fixtures`.
+audio/*
+!audio/README.md
+
+# Generated pipeline artefacts — reproducible with `make ingest`
+data/transcripts/
+data/chunks/
+data/index/
+data/normalized/
+data/manifest.json
+
+# Evaluation runs: the baseline and improved runs are committed as evidence;
+# ad-hoc timestamped runs are not.
+eval/results/run_2*/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Models / caches
+.cache/
+*.pt
+*.bin
+
+# OS
+.DS_Store

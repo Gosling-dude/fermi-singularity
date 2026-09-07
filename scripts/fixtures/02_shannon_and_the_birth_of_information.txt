@@ -1,0 +1,39 @@
+Welcome back to Great Papers. Last time we looked at Max Planck and the quantum of action. Today we jump forward almost fifty years, to nineteen forty eight, and to a paper published in the Bell System Technical Journal with the extremely modest title, A Mathematical Theory of Communication. The author is Claude Shannon, he is thirty two years old, and he has just invented information theory more or less single handedly.
+
+I want to start with what the problem was, because it is easy to miss how strange Shannon's framing was at the time. Bell Labs was a telephone company research lab. They cared about a very practical question: how much can you push down a wire before it becomes unusable? Engineers had rules of thumb. Nobody had a theory.
+
+Shannon's first move is the one I find most radical. He says, in effect, the meaning of a message is irrelevant to the engineering problem. Here is the line from the paper: the semantic aspects of communication are irrelevant to the engineering problem. Whether you are transmitting a love letter or a stock quote or random noise, the job of the channel is the same. Deliver the symbols. What matters is not what the message means but how much it could have been otherwise.
+
+That is the key idea. Information is surprise. If I tell you something you already knew for certain, I have transmitted nothing. If I tell you the outcome of a coin flip, I have told you something. And Shannon makes that precise.
+
+He asks: what is the right measure of uncertainty for a set of possible messages with known probabilities? And he does something very elegant. He does not just propose a formula. He writes down three properties that any reasonable measure of uncertainty ought to have. It should be continuous in the probabilities. If all outcomes are equally likely, more outcomes should mean more uncertainty. And if you break a choice down into successive choices, the total uncertainty should be the weighted sum of the individual ones. Then he proves that there is essentially only one formula satisfying all three.
+
+That formula is minus the sum over outcomes of p times the logarithm of p.
+
+And here is the thing that has caused eighty years of argument. That formula is, up to a constant, exactly Boltzmann's formula for entropy in statistical mechanics. Shannon called his quantity entropy. There is a famous story, and I want to flag that it is a story that Shannon told years later, so treat it accordingly, that von Neumann suggested the name to him on the grounds that nobody really knows what entropy is, so in a debate you will always have the advantage.
+
+Now, if you take the logarithm to base two, the unit of this quantity is the bit. Binary digit. Shannon credits the name to John Tukey. And this is the moment the bit becomes a physical quantity you can measure rather than just a way of writing numbers. One bit is the amount of information in a single fair coin flip. The entropy of English text, Shannon estimated, is somewhere around one point zero to one point five bits per letter, which is remarkable when you consider there are twenty six letters. Most of what you write is redundant. That redundancy is why you can read a text message with half the vowels missing.
+
+So that is the first half of the paper. The second half is where he does something I would call almost unreasonable.
+
+He asks about noise. Every real channel corrupts what you send. Static on a phone line. Scratches on a disc. And the intuition everybody had in nineteen forty eight was that noise sets a hard trade off. If you want fewer errors, you have to slow down, or shout louder, and if you want it perfect you have to slow down to nothing.
+
+Shannon proves that intuition is wrong.
+
+He defines the capacity of a noisy channel. A single number, in bits per second. And he proves that for any rate of transmission below that capacity, there exists a coding scheme that makes the error probability as small as you like. Not smaller on average. As small as you like. You can have essentially perfect communication over a noisy channel, at a finite nonzero rate. And above capacity, you cannot. There is a sharp threshold.
+
+I want to dwell on how surprising that is. Noise does not degrade you gracefully toward zero. It sets a speed limit, and below the speed limit you can be as accurate as you want, if you are clever enough about how you encode.
+
+Now here is the catch, and it is a big one. Shannon's proof is what mathematicians call non constructive. He proves good codes exist by considering the average performance of randomly chosen codes and showing the average must be good, so at least one must be good. He does not tell you how to build one. The entire field of coding theory over the next fifty years is people trying to find the codes Shannon proved were there. It took until the nineteen nineties, with turbo codes and the rediscovery of Gallager's low density parity check codes, before we had practical codes that get genuinely close to the Shannon limit.
+
+Let me draw out a few things.
+
+First, notice the structural similarity to what we saw with Planck. Shannon takes something that felt continuous and fuzzy, the notion of how much is being communicated, and shows it has a natural discrete unit. The bit. Planck found that energy comes in packets. Shannon found that information comes in bits. In both cases the discreteness is not obvious from everyday experience, and in both cases finding it unlocks an enormous amount.
+
+Second, notice the difference in attitude. Planck did not believe his own quantum. He thought it was a trick. Shannon knew exactly what he had. He states the results as theorems and proves them. That is partly a difference in the men and partly a difference in the fields, because Shannon was doing mathematics and Planck was doing physics, and physics has to answer to experiment in a way that mathematics does not.
+
+Third, and this is the one I think is most underrated: the concept of channel capacity is a statement about a limit that cannot be beaten. Not a limit of current technology. A limit of the universe, given that channel. Physics is full of these. The speed of light. Absolute zero. Shannon found one for communication.
+
+A word on entropy and noise, because we will come back to this. In Shannon's framework, noise is uncertainty about what was sent, given what was received. It is entropy. And that gives you a way to think about noise that is not about voltage or physics at all, it is about probability. When we get to quantum systems in a later episode, we are going to see a very different kind of uncertainty. Not uncertainty because the channel is messy, but uncertainty that seems to be built into nature. Whether those two kinds of uncertainty are really the same thing is a question people still argue about, and I do not want to pretend it is settled.
+
+That is Shannon, nineteen forty eight. A Mathematical Theory of Communication. The paper that gave us the bit, gave us entropy as a measure of information, and proved that noise sets a speed limit rather than an accuracy limit. Thanks for listening to Great Papers.

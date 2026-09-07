@@ -1,0 +1,207 @@
+{
+  "timestamp": "2026-09-07T20:24:01.734496+00:00",
+  "mode": "retrieval_only",
+  "num_cases": 20,
+  "passed": 17,
+  "pass_rate": 0.85,
+  "errors": 0,
+  "config": {
+    "retrieval_mode": "hybrid",
+    "query_rewrite": true,
+    "compare_mode": true,
+    "top_k": 5,
+    "dense_k": 20,
+    "bm25_k": 20,
+    "min_relevance": 0.3,
+    "chat_model": null,
+    "judge_model": null,
+    "embed_model": "BAAI/bge-small-en-v1.5",
+    "chunk_target_seconds": 75.0
+  },
+  "environment": {
+    "python": "3.12.14",
+    "platform": "macOS-26.5.1-arm64-arm-64bit"
+  },
+  "retrieval": {
+    "mean_episode_hit": 1.0,
+    "mean_term_coverage": 0.9062,
+    "mean_top_score": 0.029833
+  },
+  "refusal": {
+    "num_refusal_cases": 4,
+    "refusal_accuracy": 0.5,
+    "false_refusals": 0
+  },
+  "latency": {
+    "mean_ms": 569.0,
+    "max_ms": 9541.2
+  },
+  "cost": {
+    "estimated_usd": 0.0
+  },
+  "per_category": {
+    "factual": {
+      "total": 4,
+      "passed": 4,
+      "cases": [
+        {
+          "id": "factual_01",
+          "passed": true,
+          "failures": []
+        },
+        {
+          "id": "factual_02",
+          "passed": true,
+          "failures": []
+        },
+        {
+          "id": "factual_03",
+          "passed": true,
+          "failures": []
+        },
+        {
+          "id": "factual_04",
+          "passed": true,
+          "failures": []
+        }
+      ],
+      "pass_rate": 1.0
+    },
+    "cross_episode": {
+      "total": 3,
+      "passed": 3,
+      "cases": [
+        {
+          "id": "cross_01",
+          "passed": true,
+          "failures": []
+        },
+        {
+          "id": "cross_02",
+          "passed": true,
+          "failures": []
+        },
+        {
+          "id": "cross_03",
+          "passed": true,
+          "failures": []
+        }
+      ],
+      "pass_rate": 1.0
+    },
+    "explanation": {
+      "total": 2,
+      "passed": 2,
+      "cases": [
+        {
+          "id": "explain_01",
+          "passed": true,
+          "failures": []
+        },
+        {
+          "id": "explain_02",
+          "passed": true,
+          "failures": []
+        }
+      ],
+      "pass_rate": 1.0
+    },
+    "recommendation": {
+      "total": 1,
+      "passed": 1,
+      "cases": [
+        {
+          "id": "recommend_01",
+          "passed": true,
+          "failures": []
+        }
+      ],
+      "pass_rate": 1.0
+    },
+    "locate": {
+      "total": 2,
+      "passed": 2,
+      "cases": [
+        {
+          "id": "locate_01",
+          "passed": true,
+          "failures": []
+        },
+        {
+          "id": "locate_02",
+          "passed": true,
+          "failures": []
+        }
+      ],
+      "pass_rate": 1.0
+    },
+    "refusal": {
+      "total": 4,
+      "passed": 2,
+      "cases": [
+        {
+          "id": "refusal_01",
+          "passed": true,
+          "failures": []
+        },
+        {
+          "id": "refusal_02",
+          "passed": true,
+          "failures": []
+        },
+        {
+          "id": "refusal_03",
+          "passed": false,
+          "failures": [
+            "evidence gate did not fire for an out-of-scope question (max similarity 0.633)"
+          ]
+        },
+        {
+          "id": "refusal_04",
+          "passed": false,
+          "failures": [
+            "evidence gate did not fire for an out-of-scope question (max similarity 0.693)"
+          ]
+        }
+      ],
+      "pass_rate": 0.5
+    },
+    "ambiguous": {
+      "total": 1,
+      "passed": 1,
+      "cases": [
+        {
+          "id": "ambiguous_01",
+          "passed": true,
+          "failures": []
+        }
+      ],
+      "pass_rate": 1.0
+    },
+    "followup": {
+      "total": 3,
+      "passed": 2,
+      "cases": [
+        {
+          "id": "followup_01",
+          "passed": true,
+          "failures": []
+        },
+        {
+          "id": "followup_02",
+          "passed": false,
+          "failures": [
+            "retrieved passages covered only 0% of the expected terms"
+          ]
+        },
+        {
+          "id": "followup_03",
+          "passed": true,
+          "failures": []
+        }
+      ],
+      "pass_rate": 0.6667
+    }
+  },
+  "elapsed_seconds": 11.7
+}

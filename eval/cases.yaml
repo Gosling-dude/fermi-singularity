@@ -1,0 +1,290 @@
+# Evaluation cases for the Fermi Podcast Companion.
+#
+# Each case is run through the real production pipeline — the same retriever,
+# the same agent, the same prompts. Nothing here is answered by a fixture.
+#
+# Schema
+#   id                 unique identifier
+#   category           factual | cross_episode | explanation | recommendation
+#                      | locate | refusal | ambiguous | followup
+#   input              the learner's message (single-turn cases)
+#   turns              list of messages for a multi-turn case; the LAST turn is
+#                      the one that is scored
+#   expected:
+#     episode          episode_id that must appear in the retrieved context
+#     episodes         several episode_ids, all of which must appear
+#     must_retrieve    terms that should appear in the retrieved passages;
+#                      this is the retrieval-quality ground truth and is
+#                      checked deterministically, with no LLM involved
+#     key_points       what a good answer covers (used by the LLM judge)
+#     refusal          true when the correct behaviour is "not covered"
+#     clarify_ok       true when asking a clarifying question is acceptable
+#   must_cite          answer must carry at least one valid citation
+#   forbidden_claims   substrings that must NOT appear — these are true facts
+#                      the model knows but the episodes never state, so their
+#                      presence is direct evidence of ungrounded generation
+
+cases:
+
+  # ---- factual: answerable from a single episode ----------------------
+  - id: factual_01
+    category: factual
+    input: "What did Planck assume about the oscillators in the cavity walls?"
+    expected:
+      episode: "01_the_birth_of_the_quantum"
+      must_retrieve: ["oscillator", "discrete", "frequency"]
+      key_points:
+        - "their energy came in discrete lumps / whole-number multiples of a basic unit"
+        - "the unit was proportional to frequency (E = h f)"
+    must_cite: true
+    forbidden_claims: ["Bose-Einstein", "photon gas", "Compton"]
+
+  - id: factual_02
+    category: factual
+    input: "Why did Shannon say the meaning of a message is irrelevant?"
+    expected:
+      episode: "02_shannon_and_the_birth_of_information"
+      must_retrieve: ["semantic", "engineering"]
+      key_points:
+        - "the semantic aspects are irrelevant to the engineering problem"
+        - "what matters is how much the message could have been otherwise"
+    must_cite: true
+    forbidden_claims: ["Kolmogorov", "Hartley 1928"]
+
+  - id: factual_03
+    category: factual
+    input: "What assumptions does Bell's theorem actually rest on?"
+    expected:
+      episode: "03_bells_theorem"
+      must_retrieve: ["locality", "hidden variables"]
+      key_points:
+        - "realism / hidden variables determining outcomes in advance"
+        - "locality — no faster-than-light influence between measurements"
+        - "measurement independence (freedom of choice); superdeterminism evades it"
+    must_cite: true
+    forbidden_claims: ["CHSH", "Tsirelson"]
+
+  - id: factual_04
+    category: factual
+    input: "What is the numerical value of Planck's constant given in the episode?"
+    expected:
+      episode: "01_the_birth_of_the_quantum"
+      must_retrieve: ["constant"]
+      key_points:
+        - "about 6.626 x 10^-34 joule seconds"
+    must_cite: true
+    forbidden_claims: ["1.055", "reduced Planck", "h-bar"]
+
+  # ---- cross-episode comparison ---------------------------------------
+  - id: cross_01
+    category: cross_episode
+    input: "How do the Shannon and Bell episodes differ in what they mean by uncertainty?"
+    expected:
+      episodes:
+        - "02_shannon_and_the_birth_of_information"
+        - "03_bells_theorem"
+      must_retrieve: ["noise", "uncertainty"]
+      key_points:
+        - "Shannon: uncertainty is ignorance about what was sent, reducible in principle"
+        - "Bell: the randomness is not ignorance of a pre-existing fact"
+        - "the episode notes this comparison is still argued about"
+    must_cite: true
+    forbidden_claims: ["Heisenberg uncertainty principle", "1927"]
+
+  - id: cross_02
+    category: cross_episode
+    input: "Compare how these episodes treat the idea that something continuous is really made of discrete units."
+    expected:
+      episodes:
+        - "01_the_birth_of_the_quantum"
+        - "02_shannon_and_the_birth_of_information"
+      must_retrieve: ["discrete", "bit"]
+      key_points:
+        - "Planck: energy comes in packets / quanta"
+        - "Shannon: information has a natural unit, the bit"
+        - "Planck disbelieved his own result; Shannon knew what he had"
+    must_cite: true
+    forbidden_claims: ["Planck length", "qubit"]
+
+  - id: cross_03
+    category: cross_episode
+    input: "Do any of these episodes reference each other's ideas?"
+    expected:
+      episodes:
+        - "01_the_birth_of_the_quantum"
+        - "03_bells_theorem"
+      must_retrieve: ["Planck", "Bell"]
+      key_points:
+        - "the Planck episode forward-references Bell and Shannon"
+        - "the Bell episode traces an arc back to the 1900 paper"
+    must_cite: true
+    forbidden_claims: []
+
+  # ---- concept explanation --------------------------------------------
+  - id: explain_01
+    category: explanation
+    input: "Explain the ultraviolet catastrophe simply, like I'm new to this."
+    expected:
+      episode: "01_the_birth_of_the_quantum"
+      must_retrieve: ["ultraviolet catastrophe", "infinite"]
+      key_points:
+        - "classical physics predicts infinite radiated energy"
+        - "the problem is at short / ultraviolet wavelengths"
+        - "the nickname came later, from Ehrenfest in 1911"
+    must_cite: true
+    forbidden_claims: ["Stefan-Boltzmann law", "Wien displacement"]
+
+  - id: explain_02
+    category: explanation
+    input: "What is channel capacity and why was Shannon's result surprising?"
+    expected:
+      episode: "02_shannon_and_the_birth_of_information"
+      must_retrieve: ["capacity", "noise"]
+      key_points:
+        - "capacity is a rate in bits per second for a noisy channel"
+        - "below capacity, error can be made as small as you like"
+        - "surprising because noise sets a speed limit, not an accuracy limit"
+    must_cite: true
+    forbidden_claims: ["Nyquist", "signal-to-noise ratio formula"]
+
+  # ---- recommendation --------------------------------------------------
+  - id: recommend_01
+    category: recommendation
+    input: "Which episode should I listen to if I want to understand entropy, and why?"
+    expected:
+      episodes:
+        - "01_the_birth_of_the_quantum"
+        - "02_shannon_and_the_birth_of_information"
+      must_retrieve: ["entropy"]
+      key_points:
+        - "the Shannon episode defines entropy as a measure of information"
+        - "the Planck episode touches entropy via Boltzmann's statistical method"
+        - "recommends one and says why, rather than listing everything"
+    must_cite: true
+    forbidden_claims: ["second law of thermodynamics states"]
+
+  # ---- audio location --------------------------------------------------
+  - id: locate_01
+    category: locate
+    input: "Take me to the part where they explain what a bit is."
+    expected:
+      episode: "02_shannon_and_the_birth_of_information"
+      must_retrieve: ["bit", "Tukey"]
+      key_points:
+        - "identifies a specific passage with a timestamp"
+        - "briefly says what is discussed there"
+    must_cite: true
+    forbidden_claims: []
+
+  - id: locate_02
+    category: locate
+    input: "Where in the audio do they talk about the experiments that tested Bell's inequality?"
+    expected:
+      episode: "03_bells_theorem"
+      must_retrieve: ["Aspect", "loophole"]
+      key_points:
+        - "points to the passage covering Freedman-Clauser, Aspect and the 2015 tests"
+        - "gives a usable timestamp"
+    must_cite: true
+    forbidden_claims: []
+
+  # ---- out-of-scope refusal --------------------------------------------
+  - id: refusal_01
+    category: refusal
+    input: "What is the capital of Australia?"
+    expected:
+      refusal: true
+      key_points: ["states the supplied episodes do not cover this"]
+    must_cite: false
+    forbidden_claims: ["Canberra", "Sydney", "Melbourne"]
+
+  - id: refusal_02
+    category: refusal
+    input: "What do these episodes say about how superconductivity works?"
+    expected:
+      refusal: true
+      key_points: ["states the collection does not cover superconductivity"]
+    must_cite: false
+    forbidden_claims: ["Cooper pair", "BCS", "Meissner", "critical temperature"]
+
+  - id: refusal_03
+    category: refusal
+    input: "According to these episodes, what is Hawking radiation and how does it make black holes evaporate?"
+    expected:
+      refusal: true
+      key_points: ["states black holes / Hawking radiation are not covered"]
+    must_cite: false
+    forbidden_claims: ["event horizon", "Hawking", "evaporate", "virtual particle"]
+
+  - id: refusal_04
+    category: refusal
+    input: "What did Planck say about the double-slit experiment in this episode?"
+    expected:
+      refusal: true
+      key_points:
+        - "states the episode does not discuss the double-slit experiment"
+        - "does not fabricate a Planck quote about it"
+    must_cite: false
+    forbidden_claims: ["interference pattern", "wave-particle duality", "Young"]
+
+  # ---- ambiguous --------------------------------------------------------
+  - id: ambiguous_01
+    category: ambiguous
+    input: "What does he mean by entropy?"
+    expected:
+      clarify_ok: true
+      episodes:
+        - "01_the_birth_of_the_quantum"
+        - "02_shannon_and_the_birth_of_information"
+      must_retrieve: ["entropy"]
+      key_points:
+        - "recognises that two episodes use entropy differently"
+        - "either asks which is meant, or answers both clearly scoped"
+    must_cite: true
+    forbidden_claims: []
+
+  # ---- multi-turn follow-up --------------------------------------------
+  - id: followup_01
+    category: followup
+    turns:
+      - "What is the main idea of the Planck episode?"
+      - "Explain that act of desperation part more simply."
+    expected:
+      episode: "01_the_birth_of_the_quantum"
+      must_retrieve: ["desperation"]
+      key_points:
+        - "resolves 'that' to Planck's quantum assumption"
+        - "explains he adopted it reluctantly, as a bookkeeping device"
+        - "notes he had to concede to Boltzmann's statistical method"
+    must_cite: true
+    forbidden_claims: ["Copenhagen interpretation"]
+
+  - id: followup_02
+    category: followup
+    turns:
+      - "Tell me about Shannon's noisy channel theorem."
+      - "Why couldn't engineers actually use it at the time?"
+    expected:
+      episode: "02_shannon_and_the_birth_of_information"
+      must_retrieve: ["non constructive", "codes"]
+      key_points:
+        - "the proof is non-constructive — it shows good codes exist"
+        - "it does not tell you how to build one"
+        - "practical codes came decades later (turbo codes, LDPC)"
+    must_cite: true
+    forbidden_claims: ["Reed-Solomon", "Hamming code"]
+
+  - id: followup_03
+    category: followup
+    turns:
+      - "What is Bell's theorem about?"
+      - "Does that mean we can send messages faster than light?"
+    expected:
+      episode: "03_bells_theorem"
+      must_retrieve: ["signalling", "faster than light"]
+      key_points:
+        - "no — the no-signalling result rules it out"
+        - "each side's results look like random noise on their own"
+        - "correlations only appear when results are compared"
+    must_cite: true
+    forbidden_claims: ["quantum teleportation", "wormhole"]

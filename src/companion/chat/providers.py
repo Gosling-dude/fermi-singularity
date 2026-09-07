@@ -1,0 +1,370 @@
+"""LLM provider abstraction.
+
+Chat, query rewriting and the evaluation judge all speak to models through
+``LLMProvider``, so swapping Anthropic for OpenAI is an environment change
+rather than a code change. Providers are responsible for their own
+credential checks, error translation, token accounting and cost estimation.
+
+A note on determinism: current Claude models (Opus 5, Sonnet 5, the 4.7/4.8
+family) removed the sampling parameters — sending ``temperature`` returns a
+400. Reproducibility for evaluation therefore comes from fixed prompts, a
+pinned model id and a fixed reasoning effort, all of which are recorded in
+every eval run. ``temperature`` is still forwarded to models that accept it
+(OpenAI, older Claude models).
+"""
+
+from __future__ import annotations
+
+import json
+import time
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Any, Literal
+
+from companion.config import Settings, get_settings
+from companion.errors import ConfigError, ProviderError
+from companion.utils.logging import get_logger
+
+log = get_logger("llm")
+
+Role = Literal["chat", "judge"]
+
+# USD per 1M tokens (input, output). Used only to estimate run cost; the
+# figures are recorded alongside every eval run so they can be re-checked.
+PRICING: dict[str, tuple[float, float]] = {
+    "claude-opus-5": (5.00, 25.00),
+    "claude-opus-4-8": (5.00, 25.00),
+    "claude-sonnet-5": (2.00, 10.00),
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-haiku-4-5": (1.00, 5.00),
+    "gpt-4o": (2.50, 10.00),
+    "gpt-4o-mini": (0.15, 0.60),
+}
+
+# Claude models that removed temperature/top_p/top_k (sending them is a 400).
+_NO_SAMPLING_PREFIXES = (
+    "claude-opus-5",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-sonnet-5",
+    "claude-fable-5",
+    "claude-mythos-5",
+)
+
+
+def _supports_sampling(model: str) -> bool:
+    return not model.startswith(_NO_SAMPLING_PREFIXES)
+
+
+def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+    """Estimated USD for one call. Unknown models return 0.0 rather than guess."""
+    rates = PRICING.get(model)
+    if not rates:
+        return 0.0
+    return (input_tokens * rates[0] + output_tokens * rates[1]) / 1_000_000
+
+
+@dataclass
+class LLMResponse:
+    """One completion plus the accounting needed by the eval runner."""
+
+    text: str
+    model: str
+    provider: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    latency_ms: float = 0.0
+    stop_reason: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def estimated_cost_usd(self) -> float:
+        return estimate_cost(self.model, self.input_tokens, self.output_tokens)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "model": self.model,
+            "provider": self.provider,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "latency_ms": round(self.latency_ms, 1),
+            "estimated_cost_usd": round(self.estimated_cost_usd, 6),
+            "stop_reason": self.stop_reason,
+        }
+
+
+class LLMProvider(ABC):
+    """Minimal surface every provider implements."""
+
+    name: str
+
+    def __init__(self, model: str, settings: Settings) -> None:
+        self.model = model
+        self.settings = settings
+
+    @abstractmethod
+    def complete(
+        self,
+        system: str,
+        messages: list[dict[str, str]],
+        *,
+        max_tokens: int = 4000,
+        effort: str = "medium",
+        temperature: float | None = None,
+    ) -> LLMResponse:
+        """Return one completion. Raises ``ProviderError`` on any failure."""
+
+    def complete_json(
+        self,
+        system: str,
+        messages: list[dict[str, str]],
+        *,
+        max_tokens: int = 2000,
+        effort: str = "medium",
+    ) -> dict[str, Any]:
+        """Complete and parse a JSON object from the response.
+
+        Models occasionally wrap JSON in prose or a fenced block, so the
+        payload is extracted by brace matching rather than a strict parse of
+        the whole string.
+        """
+        response = self.complete(
+            system, messages, max_tokens=max_tokens, effort=effort
+        )
+        return _extract_json(response.text)
+
+
+def _extract_json(text: str) -> dict[str, Any]:
+    """Pull the first balanced JSON object out of a model response."""
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("```")[1] if "```" in cleaned[3:] else cleaned[3:]
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:]
+    start = cleaned.find("{")
+    if start == -1:
+        raise ProviderError(
+            "Model did not return JSON.",
+            "Re-run the case; if it persists, lower the judge's effort or "
+            "switch JUDGE_MODEL.",
+        )
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(cleaned)):
+        char = cleaned[index]
+        if escape:
+            escape = False
+            continue
+        if char == "\\":
+            escape = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(cleaned[start : index + 1])
+                except json.JSONDecodeError as exc:
+                    raise ProviderError(f"Malformed JSON from model: {exc}") from exc
+    raise ProviderError("Model returned an unterminated JSON object.")
+
+
+class AnthropicProvider(LLMProvider):
+    name = "anthropic"
+
+    def __init__(self, model: str, settings: Settings) -> None:
+        super().__init__(model, settings)
+        import anthropic
+
+        key = settings.anthropic_api_key
+        if not key:
+            raise ConfigError(
+                "ANTHROPIC_API_KEY is not set.",
+                "Copy .env.example to .env and add your key, or switch "
+                "provider with CHAT_PROVIDER=openai.",
+            )
+        self._sdk = anthropic
+        self._client = anthropic.Anthropic(api_key=key, timeout=120.0, max_retries=3)
+
+    def complete(
+        self,
+        system: str,
+        messages: list[dict[str, str]],
+        *,
+        max_tokens: int = 4000,
+        effort: str = "medium",
+        temperature: float | None = None,
+    ) -> LLMResponse:
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": messages,
+            "output_config": {"effort": effort},
+        }
+        if temperature is not None and _supports_sampling(self.model):
+            kwargs["temperature"] = temperature
+
+        started = time.perf_counter()
+        try:
+            response = self._client.messages.create(**kwargs)
+        except self._sdk.AuthenticationError as exc:
+            raise ConfigError(
+                "Anthropic rejected the API key.",
+                "Check ANTHROPIC_API_KEY in your .env.",
+            ) from exc
+        except self._sdk.NotFoundError as exc:
+            raise ConfigError(
+                f"Model '{self.model}' was not found.",
+                "Set CHAT_MODEL to a model your key can access, "
+                "e.g. claude-sonnet-5.",
+            ) from exc
+        except self._sdk.RateLimitError as exc:
+            raise ProviderError(
+                "Anthropic rate limit reached.",
+                "Wait a moment and re-run; the eval runner is resumable.",
+            ) from exc
+        except self._sdk.APITimeoutError as exc:
+            raise ProviderError(
+                "Anthropic request timed out after 120s.",
+                "Re-run, or reduce CHAT_MAX_TOKENS.",
+            ) from exc
+        except self._sdk.APIConnectionError as exc:
+            raise ProviderError(
+                "Could not reach the Anthropic API.", "Check your network."
+            ) from exc
+        except self._sdk.APIStatusError as exc:
+            raise ProviderError(f"Anthropic API error ({exc.status_code}).") from exc
+        latency_ms = (time.perf_counter() - started) * 1000
+
+        if response.stop_reason == "refusal":
+            raise ProviderError(
+                "The model declined this request at the safety layer.",
+                "This is a provider-level refusal, distinct from the "
+                "product's own 'not covered in these episodes' behaviour.",
+            )
+
+        text = "".join(
+            block.text for block in response.content if block.type == "text"
+        )
+        return LLMResponse(
+            text=text.strip(),
+            model=self.model,
+            provider=self.name,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+            latency_ms=latency_ms,
+            stop_reason=response.stop_reason,
+        )
+
+
+class OpenAIProvider(LLMProvider):
+    name = "openai"
+
+    def __init__(self, model: str, settings: Settings) -> None:
+        super().__init__(model, settings)
+        import openai
+
+        key = settings.openai_api_key
+        if not key:
+            raise ConfigError(
+                "OPENAI_API_KEY is not set.",
+                "Copy .env.example to .env and add your key, or switch "
+                "provider with CHAT_PROVIDER=anthropic.",
+            )
+        self._sdk = openai
+        self._client = openai.OpenAI(api_key=key, timeout=120.0, max_retries=3)
+
+    def complete(
+        self,
+        system: str,
+        messages: list[dict[str, str]],
+        *,
+        max_tokens: int = 4000,
+        effort: str = "medium",
+        temperature: float | None = None,
+    ) -> LLMResponse:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "max_completion_tokens": max_tokens,
+            "messages": [{"role": "system", "content": system}, *messages],
+        }
+        if temperature is not None:
+            payload["temperature"] = temperature
+
+        started = time.perf_counter()
+        try:
+            response = self._client.chat.completions.create(**payload)
+        except self._sdk.AuthenticationError as exc:
+            raise ConfigError(
+                "OpenAI rejected the API key.", "Check OPENAI_API_KEY in your .env."
+            ) from exc
+        except self._sdk.NotFoundError as exc:
+            raise ConfigError(
+                f"Model '{self.model}' was not found.",
+                "Set CHAT_MODEL to a model your key can access, e.g. gpt-4o.",
+            ) from exc
+        except self._sdk.RateLimitError as exc:
+            raise ProviderError(
+                "OpenAI rate limit reached.", "Wait a moment and re-run."
+            ) from exc
+        except self._sdk.APITimeoutError as exc:
+            raise ProviderError("OpenAI request timed out after 120s.") from exc
+        except self._sdk.APIConnectionError as exc:
+            raise ProviderError(
+                "Could not reach the OpenAI API.", "Check your network."
+            ) from exc
+        except self._sdk.APIStatusError as exc:
+            raise ProviderError(f"OpenAI API error ({exc.status_code}).") from exc
+        latency_ms = (time.perf_counter() - started) * 1000
+
+        choice = response.choices[0]
+        usage = response.usage
+        return LLMResponse(
+            text=(choice.message.content or "").strip(),
+            model=self.model,
+            provider=self.name,
+            input_tokens=usage.prompt_tokens if usage else 0,
+            output_tokens=usage.completion_tokens if usage else 0,
+            latency_ms=latency_ms,
+            stop_reason=choice.finish_reason,
+        )
+
+
+_PROVIDERS: dict[str, type[LLMProvider]] = {
+    "anthropic": AnthropicProvider,
+    "openai": OpenAIProvider,
+}
+
+
+def get_provider(role: Role = "chat", settings: Settings | None = None) -> LLMProvider:
+    """Build the provider configured for ``chat`` or ``judge``."""
+    settings = settings or get_settings()
+    if role == "judge":
+        provider_name, model = settings.judge_provider, settings.judge_model
+    else:
+        provider_name, model = settings.chat_provider, settings.chat_model
+
+    provider_cls = _PROVIDERS.get(provider_name)
+    if provider_cls is None:
+        raise ConfigError(
+            f"Unknown provider '{provider_name}'.",
+            f"Set {role.upper()}_PROVIDER to one of: "
+            f"{', '.join(sorted(_PROVIDERS))}.",
+        )
+    log.debug("provider resolved", role=role, provider=provider_name, model=model)
+    return provider_cls(model, settings)
+
+
+def provider_available(role: Role = "chat", settings: Settings | None = None) -> bool:
+    """True when credentials for ``role`` are present (no network call)."""
+    settings = settings or get_settings()
+    name = settings.judge_provider if role == "judge" else settings.chat_provider
+    return bool(settings.api_key_for(name))
