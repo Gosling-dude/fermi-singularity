@@ -9,7 +9,7 @@ export PYTHONPATH := src:.
 # Prefer a modern interpreter; the project needs >= 3.11.
 PYTHON_BIN ?= $(shell command -v python3.12 || command -v python3.11 || command -v python3)
 
-.PHONY: help setup check-ffmpeg ingest reingest chat web search episodes doctor \
+.PHONY: help setup check-ffmpeg ingest reingest chat web search episodes doctor models \
         test eval eval-retrieval eval-baseline eval-improved eval-compare \
         fixtures demo clean clean-data
 
@@ -62,6 +62,9 @@ episodes: ## List the ingested episodes
 
 doctor: ## Check the environment and report what is missing
 	@$(PY) -m companion.interface.cli doctor
+
+models: ## List models available through OpenRouter.  make models F=claude
+	@$(PY) -m companion.interface.cli models $(if $(F),--filter $(F),)
 
 search: ## Retrieval only, no API key needed.  make search Q="your question"
 	@$(PY) -m companion.interface.cli search $(Q)

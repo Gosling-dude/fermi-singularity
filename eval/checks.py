@@ -100,9 +100,15 @@ def run_checks(case: EvalCase, response: ChatResponse) -> CheckResult:
             failures.append("in-scope question was wrongly refused as not covered")
 
     # A true fact the episodes never state is direct evidence the model fell
-    # back on its own knowledge.
+    # back on its own knowledge — unless the learner put the term in the
+    # question. A refusal has to be able to name what it is declining
+    # ("the episodes don't mention Hawking radiation") without that counting
+    # as a fabricated claim.
+    asked = " ".join(case.turns)
     leaked = [
-        claim for claim in case.forbidden_claims if _contains_term(answer, claim)
+        claim
+        for claim in case.forbidden_claims
+        if _contains_term(answer, claim) and not _contains_term(asked, claim)
     ]
     checks["no_forbidden_claims"] = not leaked
     if leaked:

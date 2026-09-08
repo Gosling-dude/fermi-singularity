@@ -29,8 +29,9 @@ log = get_logger("llm")
 
 Role = Literal["chat", "judge"]
 
-# USD per 1M tokens (input, output). Used only to estimate run cost; the
-# figures are recorded alongside every eval run so they can be re-checked.
+# USD per 1M tokens (input, output), for providers that do not report spend.
+# OpenRouter reports actual cost per call, so its models do not need an entry
+# here — which also means no hard-coded price can silently go stale.
 PRICING: dict[str, tuple[float, float]] = {
     "claude-opus-5": (5.00, 25.00),
     "claude-opus-4-8": (5.00, 25.00),
@@ -60,10 +61,16 @@ class LLMResponse:
     output_tokens: int = 0
     latency_ms: float = 0.0
     stop_reason: str | None = None
+    # Actual spend reported by the provider, when it reports one. OpenRouter
+    # does; it is preferred over the local pricing table because it cannot go
+    # stale and it accounts for the model that actually served the request.
+    reported_cost_usd: float | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
     @property
     def estimated_cost_usd(self) -> float:
+        if self.reported_cost_usd is not None:
+            return self.reported_cost_usd
         return estimate_cost(self.model, self.input_tokens, self.output_tokens)
 
     def as_dict(self) -> dict[str, Any]:
@@ -74,6 +81,9 @@ class LLMResponse:
             "output_tokens": self.output_tokens,
             "latency_ms": round(self.latency_ms, 1),
             "estimated_cost_usd": round(self.estimated_cost_usd, 6),
+            "cost_source": (
+                "provider" if self.reported_cost_usd is not None else "estimated"
+            ),
             "stop_reason": self.stop_reason,
         }
 
@@ -324,7 +334,184 @@ class OpenAIProvider(LLMProvider):
         )
 
 
+class OpenRouterProvider(LLMProvider):
+    """OpenRouter — one key, many vendors.
+
+    OpenRouter exposes an OpenAI-compatible ``/chat/completions`` endpoint, so
+    the official ``openai`` SDK is pointed at its base URL rather than a
+    bespoke HTTP client. That keeps retries, timeouts and typed exceptions
+    identical to the OpenAI provider.
+
+    Two OpenRouter-specific behaviours are worth noting:
+
+    * ``usage: {"include": true}`` makes the response carry the **actual**
+      credits spent, which is reported instead of a locally estimated price.
+    * ``reasoning: {"effort": ...}`` is only accepted by reasoning-capable
+      models, so it is opt-in (``OPENROUTER_SEND_REASONING``) rather than
+      always sent — any of OpenRouter's models can be selected without a 400.
+    """
+
+    name = "openrouter"
+
+    def __init__(self, model: str, settings: Settings) -> None:
+        super().__init__(model, settings)
+        import openai
+
+        key = settings.openrouter_api_key
+        if not key:
+            raise ConfigError(
+                "OPENROUTER_API_KEY is not set.",
+                "Add your OpenRouter key to .env "
+                "(get one at https://openrouter.ai/keys), or switch provider "
+                "with CHAT_PROVIDER=anthropic / openai.",
+            )
+        self._sdk = openai
+        headers = {"X-Title": settings.openrouter_app_title}
+        if settings.openrouter_site_url:
+            headers["HTTP-Referer"] = settings.openrouter_site_url
+        self._client = openai.OpenAI(
+            api_key=key,
+            base_url=settings.openrouter_base_url,
+            default_headers=headers,
+            timeout=180.0,
+            max_retries=3,
+        )
+
+    def complete(
+        self,
+        system: str,
+        messages: list[dict[str, str]],
+        *,
+        max_tokens: int = 4000,
+        effort: str = "medium",
+        temperature: float | None = None,
+    ) -> LLMResponse:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "system", "content": system}, *messages],
+            # Ask OpenRouter to return what the call actually cost.
+            "extra_body": {"usage": {"include": True}},
+        }
+        if temperature is not None:
+            payload["temperature"] = temperature
+        if self.settings.openrouter_send_reasoning:
+            payload["extra_body"]["reasoning"] = {"effort": effort}
+
+        started = time.perf_counter()
+        try:
+            response = self._client.chat.completions.create(**payload)
+        except self._sdk.AuthenticationError as exc:
+            raise ConfigError(
+                "OpenRouter rejected the API key.",
+                "Check OPENROUTER_API_KEY in your .env.",
+            ) from exc
+        except self._sdk.NotFoundError as exc:
+            raise ConfigError(
+                f"OpenRouter does not have a model called '{self.model}'.",
+                "Model ids are namespaced, e.g. 'anthropic/claude-sonnet-5'. "
+                "Run `make models` to list what your key can reach.",
+            ) from exc
+        except self._sdk.PermissionDeniedError as exc:
+            raise ConfigError(
+                f"Your OpenRouter key is not allowed to use '{self.model}'.",
+                "Some models need extra account setup or credits. "
+                "Run `make models` to see the available ids.",
+            ) from exc
+        except self._sdk.BadRequestError as exc:
+            raise ProviderError(
+                f"OpenRouter rejected the request for '{self.model}': "
+                f"{getattr(exc, 'message', exc)}",
+                "If the model is not reasoning-capable, set "
+                "OPENROUTER_SEND_REASONING=false (the default).",
+            ) from exc
+        except self._sdk.RateLimitError as exc:
+            raise ProviderError(
+                "OpenRouter rate limit or insufficient credits.",
+                "Check your credit balance at https://openrouter.ai/credits, "
+                "then re-run.",
+            ) from exc
+        except self._sdk.APITimeoutError as exc:
+            raise ProviderError(
+                "OpenRouter request timed out after 180s.",
+                "Re-run, or lower CHAT_MAX_TOKENS.",
+            ) from exc
+        except self._sdk.APIConnectionError as exc:
+            raise ProviderError(
+                "Could not reach OpenRouter.", "Check your network."
+            ) from exc
+        except self._sdk.APIStatusError as exc:
+            raise ProviderError(
+                f"OpenRouter API error ({exc.status_code})."
+            ) from exc
+        latency_ms = (time.perf_counter() - started) * 1000
+
+        # OpenRouter surfaces upstream failures as a body-level `error` on an
+        # otherwise 200 response, so choices can legitimately be absent.
+        choices = getattr(response, "choices", None)
+        if not choices:
+            detail = getattr(response, "error", None) or "no choices returned"
+            raise ProviderError(
+                f"OpenRouter returned no completion for '{self.model}': {detail}",
+                "The upstream provider may be down; try another model with "
+                "`make models`.",
+            )
+
+        choice = choices[0]
+        usage = getattr(response, "usage", None)
+        return LLMResponse(
+            text=(choice.message.content or "").strip(),
+            model=getattr(response, "model", self.model),
+            provider=self.name,
+            input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            output_tokens=getattr(usage, "completion_tokens", 0) or 0,
+            latency_ms=latency_ms,
+            stop_reason=choice.finish_reason,
+            reported_cost_usd=_openrouter_cost(usage),
+        )
+
+
+def _openrouter_cost(usage: Any) -> float | None:
+    """Pull the actual spend out of an OpenRouter usage object.
+
+    Returns ``None`` when the field is absent so the caller falls back to the
+    local pricing table rather than silently reporting zero.
+    """
+    if usage is None:
+        return None
+    cost = getattr(usage, "cost", None)
+    if cost is None and hasattr(usage, "model_extra"):
+        cost = (usage.model_extra or {}).get("cost")
+    try:
+        return float(cost) if cost is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def list_openrouter_models(settings: Settings | None = None) -> list[dict[str, Any]]:
+    """Fetch OpenRouter's live model catalogue.
+
+    Used by `make models` and by `make doctor` so a misconfigured model id is
+    caught with a list of real alternatives instead of a failed run.
+    """
+    import httpx
+
+    settings = settings or get_settings()
+    try:
+        response = httpx.get(
+            f"{settings.openrouter_base_url}/models", timeout=30.0
+        )
+        response.raise_for_status()
+    except Exception as exc:  # noqa: BLE001 - network is optional here
+        raise ProviderError(
+            f"Could not fetch the OpenRouter model list: {exc}",
+            "Check your network, or browse https://openrouter.ai/models",
+        ) from exc
+    return response.json().get("data", [])
+
+
 _PROVIDERS: dict[str, type[LLMProvider]] = {
+    "openrouter": OpenRouterProvider,
     "anthropic": AnthropicProvider,
     "openai": OpenAIProvider,
 }

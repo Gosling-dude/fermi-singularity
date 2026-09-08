@@ -250,6 +250,52 @@ def run_episodes() -> int:
     return 0
 
 
+def run_models(filter_text: str | None, limit: int) -> int:
+    """List models available through OpenRouter, cheapest first."""
+    from companion.chat.providers import list_openrouter_models
+
+    models = list_openrouter_models()
+
+    def price(model: dict) -> tuple[float, float]:
+        pricing = model.get("pricing") or {}
+        try:
+            return (
+                float(pricing.get("prompt") or 0) * 1e6,
+                float(pricing.get("completion") or 0) * 1e6,
+            )
+        except (TypeError, ValueError):
+            return (0.0, 0.0)
+
+    rows = []
+    for model in models:
+        model_id = model.get("id", "")
+        if filter_text and filter_text.lower() not in model_id.lower():
+            continue
+        prompt_price, completion_price = price(model)
+        rows.append((prompt_price, completion_price, model_id,
+                     model.get("context_length")))
+    rows.sort()
+
+    table = Table(
+        title=f"OpenRouter models ({len(rows)} shown of {len(models)})",
+        header_style="bold cyan",
+    )
+    table.add_column("Model id")
+    table.add_column("$/1M in", justify="right")
+    table.add_column("$/1M out", justify="right")
+    table.add_column("Context", justify="right", style="dim")
+    for prompt_price, completion_price, model_id, context in rows[:limit]:
+        table.add_row(
+            model_id, f"{prompt_price:.2f}", f"{completion_price:.2f}",
+            f"{context:,}" if context else "—",
+        )
+    console.print(table)
+    console.print(
+        "[dim]Set CHAT_MODEL / JUDGE_MODEL in .env to one of these ids.[/dim]"
+    )
+    return 0
+
+
 def run_doctor() -> int:
     """Report on the environment so setup problems are self-diagnosing."""
     import shutil
@@ -289,12 +335,46 @@ def run_doctor() -> int:
                   settings.judge_model)
 
     console.print(table)
+
+    if settings.chat_provider == "openrouter" and chat_key:
+        _check_openrouter_models(settings)
+
     if not chat_key:
+        key_name = {
+            "openrouter": "OPENROUTER_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "openai": "OPENAI_API_KEY",
+        }.get(settings.chat_provider, "the provider's API key")
         console.print(
-            "\n[yellow]Chat and evaluation need an API key.[/yellow]\n"
-            "  → cp .env.example .env  and add ANTHROPIC_API_KEY"
+            f"\n[yellow]Chat and evaluation need an API key.[/yellow]\n"
+            f"  → add {key_name} to .env "
+            f"(CHAT_PROVIDER={settings.chat_provider})"
         )
     return 0
+
+
+def _check_openrouter_models(settings) -> None:
+    """Warn early if CHAT_MODEL / JUDGE_MODEL are not real OpenRouter ids."""
+    from companion.chat.providers import list_openrouter_models
+    from companion.errors import CompanionError
+
+    try:
+        available = {model.get("id") for model in list_openrouter_models(settings)}
+    except CompanionError as exc:
+        console.print(f"[dim]Could not verify model ids: {exc.message}[/dim]")
+        return
+    for label, model in (
+        ("CHAT_MODEL", settings.chat_model),
+        ("JUDGE_MODEL", settings.judge_model),
+    ):
+        if model in available:
+            console.print(f"[green]✓[/green] {label} [bold]{model}[/bold] "
+                          f"is available on OpenRouter")
+        else:
+            console.print(
+                f"[red]✗[/red] {label} [bold]{model}[/bold] was not found on "
+                f"OpenRouter.\n  → run [bold]make models[/bold] to list valid ids"
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -309,6 +389,12 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser("chat", help="start a conversation")
     subparsers.add_parser("episodes", help="list ingested episodes")
     subparsers.add_parser("doctor", help="check the environment")
+    models = subparsers.add_parser(
+        "models", help="list models available through OpenRouter"
+    )
+    models.add_argument("--filter", dest="filter_text",
+                        help="substring to match against model ids")
+    models.add_argument("--limit", type=int, default=40)
     search = subparsers.add_parser("search", help="retrieval only, no API key needed")
     search.add_argument("query", nargs="+")
     search.add_argument("-k", "--top-k", type=int, default=5)
@@ -321,6 +407,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_episodes()
         if args.command == "doctor":
             return run_doctor()
+        if args.command == "models":
+            return run_models(args.filter_text, args.limit)
         if args.command == "search":
             return run_search(" ".join(args.query), args.top_k)
         return run_chat()

@@ -156,3 +156,50 @@ def test_judge_pass_requires_grounding_not_just_fluency():
 def test_judge_failure_is_recorded_not_raised():
     assert not JudgeResult(error="rate limited").ok
     assert not JudgeResult(error="rate limited").passed
+
+
+def test_echoing_a_forbidden_term_from_the_question_is_not_a_leak(
+    retrieved, episodes
+):
+    """A refusal must be able to name what it is declining.
+
+    "The episodes don't mention Hawking radiation" repeats a term from the
+    learner's own question; that is not evidence of ungrounded generation.
+    """
+    case = EvalCase(
+        id="t", category="refusal",
+        turns=["What is Hawking radiation?"],
+        expected={"refusal": True},
+        forbidden_claims=["Hawking", "event horizon"],
+    )
+    result = run_checks(
+        case,
+        _response("The episodes don't mention Hawking radiation.",
+                  retrieved, episodes, not_covered=True),
+    )
+    assert result.passed, result.failures
+
+
+def test_a_term_absent_from_the_question_is_still_caught(retrieved, episodes):
+    case = EvalCase(
+        id="t", category="refusal",
+        turns=["What is Hawking radiation?"],
+        expected={"refusal": True},
+        forbidden_claims=["Hawking", "event horizon"],
+    )
+    result = run_checks(
+        case,
+        _response("It is emitted at the event horizon.", retrieved, episodes,
+                  not_covered=True),
+    )
+    assert not result.passed
+    assert any("event horizon" in f for f in result.failures)
+
+
+def test_refusal_message_makes_no_unverifiable_process_claim():
+    from companion.chat.agent import NOT_COVERED_MESSAGE
+
+    lowered = NOT_COVERED_MESSAGE.lower()
+    assert "i searched" not in lowered
+    assert "every episode" not in lowered
+    assert "don't cover" in lowered

@@ -84,13 +84,13 @@ the offline mode below possible.
 ### 2.1 Offline mode — why the headline numbers cost $0
 
 `make eval-retrieval` runs every case through the real pipeline but stops after
-retrieval and the evidence gate. No LLM is called. This measures exactly the
-two things the improvement in §6 targets — retrieval quality and refusal
-behaviour — with **no API key and no cost**, which is why it is the mode used
-for the baseline/improved comparison in this document.
+retrieval and the evidence gate. **No LLM is called — even when a key is
+configured**, so its numbers are free, deterministic, and identical on any
+machine. This measures exactly the two things the improvement in §6 targets:
+retrieval quality and refusal behaviour.
 
-`make eval` runs the full pipeline including generation and the judge, and
-requires an API key. See §9 for what it adds and why it has not been run yet.
+`make eval` runs the full pipeline including generation and the LLM judge, and
+requires an API key. Results in §9.
 
 ---
 
@@ -355,57 +355,132 @@ the one-off cross-encoder load on the first query; steady-state reranking is
 ~35 ms for 8 passages, which is negligible next to an LLM call.
 
 ### Honest reading of the headline number
-The 85% figure covers only the retrieval and gating layer. It is not a claim
-about answer quality, which needs the full run in §9.
+The 85% figure covers only the retrieval and gating layer — it is not a claim
+about answer quality. The full pipeline, measured separately in §9, scores
+19/20 with refusal accuracy 4/4 and citation validity 100%.
 
 ---
 
 ## 8. Remaining weaknesses
 
-1. **Two adjacent-topic refusals rely entirely on the prompt.** Measured only
-   when `make eval` runs with a key. This is the biggest open risk.
-2. **Follow-up retrieval degrades without query rewriting** (`followup_02`).
-   The rewriting step exists and is enabled by default, but it needs an API
-   key, so offline mode cannot show its benefit. A free fallback —
-   concatenating the previous question with the follow-up — would likely fix
-   this and is the obvious next change.
-3. **The corpus is small** (19 chunks, ~20 min). Retrieval metrics are
+1. ~~Two adjacent-topic refusals rely entirely on the prompt.~~ **Resolved and
+   measured** — the full run in §9 scores refusal accuracy 4/4, confirming the
+   prompt catches what the gate delegates.
+2. ~~Follow-up retrieval degrades without query rewriting.~~ **Resolved with a
+   key** — `followup_02` passes in the full run. It still fails offline, so a
+   free fallback (concatenating the previous question with the follow-up)
+   remains worthwhile for keyless operation.
+3. **Unsupported narrative completion.** `followup_01` in §9.2 — the model
+   inferred a fact the transcript implies but never states. No deterministic
+   check catches this class, and the strict grounding prompt did not prevent
+   it. This is the biggest open risk in the system.
+4. **The corpus is small** (19 chunks, ~20 min). Retrieval metrics are
    optimistic at this scale; `episode_hit` of 100% is much easier with three
    episodes than thirty.
-4. **The judge is unvalidated.** I have not measured judge–human agreement, so
-   its scores should be read as a signal, not a verdict.
-5. **Absolute numbers are corpus-specific.** See the note in §3.
-6. **`term_coverage` is a proxy.** It rewards lexical overlap with the terms I
+5. **The judge is unvalidated.** I have not measured judge–human agreement, so
+   its scores should be read as a signal, not a verdict — though on the two
+   cases in §9.1 and the one in §9.2 its rationales were specific and correct
+   on inspection.
+6. **Absolute numbers are corpus-specific.** See the note in §3.
+7. **`term_coverage` is a proxy.** It rewards lexical overlap with the terms I
    chose, which under-credits a passage that conveys the idea in other words.
 
 ---
 
-## 9. What the full evaluation adds
+## 9. Full pipeline results (generation + LLM judge)
 
-`make eval` runs generation and the judge, and reports the axes offline mode
-cannot: faithfulness, completeness, citation correctness, clarity, citation
-validity rate, and forbidden-claim leakage in generated text. It also exercises
-query rewriting, which should fix `followup_02`, and the grounding prompt,
-which is the only thing that can catch `refusal_03` and `refusal_04`.
+`eval/results/run_full_openrouter/` — run through OpenRouter with
+`anthropic/claude-sonnet-5` for chat and `openai/gpt-5-mini` as judge. The judge
+is a **different vendor from the chat model on purpose**: a judge grading its
+own family's output is prone to self-preference bias, and OpenRouter makes
+cross-vendor judging a one-line change on a single key.
 
-It has **not been run**, because no API key was available in this environment.
-`eval/results/` therefore contains three real offline runs and no fabricated
-full-pipeline numbers. Estimated cost for one full run of all 20 cases with
-`claude-sonnet-5` as both chat and judge is **≈ $0.10–0.20**; the runner records
-actual token counts and cost in `summary.json`.
+```
+Pass rate                19/20   (95%)
+Refusal accuracy           4/4  (100%)
+False refusals                      0
+Citation validity                100%   (0 invalid of 68)
+Retrieval: episode hit           100%
+Retrieval: term coverage          94%
+Judge: faithfulness              4.85
+Judge: completeness              5.00
+Judge: citation correctness      5.00
+Judge: refusal correctness       5.00
+Judge: clarity                   5.00
+Mean latency                    8.56s
+Actual cost                   $0.2735   (reported by OpenRouter, not estimated)
+```
 
----
+Three things are worth drawing out.
+
+**The two-layer refusal design is validated.** Offline, the calibrated gate
+catches 2 of 4 refusals and deliberately delegates the two topically adjacent
+ones. With generation enabled, refusal accuracy is **4/4** — the grounding
+prompt caught exactly the cases the gate passed to it. That is the design
+working as intended, and it is the answer to the open risk flagged in §8.
+
+**Citation validity is 100% across 68 citations.** No fabricated episode, no
+invented timestamp, nothing stripped by the validator.
+
+**Query rewriting fixes Failure 3.** `followup_02` — the un-anchored follow-up
+that failed offline — passes here. "Why couldn't engineers actually use it at
+the time?" was rewritten to "Why couldn't engineers actually use Shannon's
+noisy channel theorem at the time?" and retrieval found the right passage.
+
+### 9.1 Two defects the evaluation found — in the evaluation and in the product
+
+The first full run scored 18/20. Both failures turned out to be defects in *my
+own work*, not in the system's reasoning, and both are worth recording because
+finding them is the entire point of building an evaluation. That run is kept at
+`eval/results/run_full_pre_fixes/`.
+
+**`refusal_03` — a false positive in my deterministic check.** The system
+produced a near-perfect refusal ("None of them mention Hawking radiation, black
+holes, or black hole evaporation, so I can't answer this from the material
+provided") and the judge scored it 5/5/5/5/5. My forbidden-claim check failed it
+for containing the word "Hawking" — a term the *learner* had put in the
+question. A refusal has to be able to name what it is declining. Fixed: a
+forbidden claim that already appears in the case's own input is not evidence of
+ungrounded generation. Terms absent from the question ("event horizon",
+"virtual particle") are still caught.
+
+**`refusal_01` — an unverifiable claim in my refusal message.** The judge docked
+faithfulness to 3 with a precise rationale: the canned message said *"I searched
+the transcripts of every episode in this collection"*, which the retrieved
+passages cannot support. The judge was right — the statement is true of the
+system but is not grounded in the evidence shown. Fixed in the product, not in
+the judge: the message now asserts only the outcome. Keeping the judge strict
+was the better trade.
+
+### 9.2 The one real remaining failure
+
+`followup_01` fails on faithfulness (3/5), and this one is genuine.
+
+Asked to explain Planck's "act of desperation" more simply, the answer states
+that Planck **never succeeded** in finding a derivation without the quantum
+assumption. The transcript says he "spent years trying to do exactly that
+himself" — it never says he failed. The claim is historically true, which is
+precisely why it is dangerous: the model completed the narrative arc that
+"spent years trying" implies, and produced an unsupported fact that reads
+perfectly naturally.
+
+This is the exact failure mode the product exists to prevent, it survived a
+strict grounding prompt, and it was caught only by the judge — not by any
+deterministic check. It is the strongest argument in this document for having
+an LLM judge at all, and the most useful open problem in the system.
 
 ## 10. Next improvements, in priority order
 
-1. **Free follow-up query expansion** — prepend the previous turn's question to
-   a context-dependent follow-up when no LLM is available. Directly targets
-   Failure 3 at zero cost.
-2. **Run `make eval` and validate the second gate layer** — confirm the
-   grounding prompt catches the two adjacent-topic refusals the gate delegates.
-3. **A second, semantic gate for adjacent topics** — a single cheap
-   `claude-haiku-4-5` call asking "do these passages contain an answer?" would
-   likely close `refusal_03`/`refusal_04` for a fraction of a cent.
+1. **Attack unsupported narrative completion** (§9.2) — the one real open
+   failure. A verification pass that re-reads each claim against the cited
+   passage, or a prompt rule specifically forbidding inferences the transcript
+   only implies, is the obvious next experiment.
+2. **Free follow-up query expansion** — prepend the previous turn's question to
+   a context-dependent follow-up when no LLM is available, so keyless operation
+   matches the full pipeline on `followup_02`.
+3. **Broaden the judge across vendors** — run the same cases through two judges
+   from different families and report disagreement, which would also give the
+   judge-validation §8.5 asks for. OpenRouter makes this a config change.
 4. **Sentence-level citation anchoring** — cite the specific sentence rather
    than the whole 75-second chunk, narrowing what a learner must listen to.
 5. **Measure judge agreement** against my own labels on the 20 cases, so the

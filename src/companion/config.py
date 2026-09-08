@@ -21,7 +21,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 load_dotenv(PROJECT_ROOT / ".env", override=False)
 
-Provider = Literal["anthropic", "openai"]
+Provider = Literal["openrouter", "anthropic", "openai"]
 LocalOrApi = Literal["local", "openai"]
 
 
@@ -49,21 +49,44 @@ class Settings(BaseSettings):
         return values
 
     # --- chat -------------------------------------------------------------
-    chat_provider: Provider = Field(default="anthropic", alias="CHAT_PROVIDER")
-    chat_model: str = Field(default="claude-sonnet-5", alias="CHAT_MODEL")
+    chat_provider: Provider = Field(default="openrouter", alias="CHAT_PROVIDER")
+    chat_model: str = Field(
+        default="anthropic/claude-sonnet-5", alias="CHAT_MODEL"
+    )
     chat_max_tokens: int = Field(default=8000, alias="CHAT_MAX_TOKENS")
     chat_effort: str = Field(default="medium", alias="CHAT_EFFORT")
     rewrite_effort: str = Field(default="low", alias="REWRITE_EFFORT")
 
     # --- judge (evaluation) ----------------------------------------------
-    judge_provider: Provider = Field(default="anthropic", alias="JUDGE_PROVIDER")
-    judge_model: str = Field(default="claude-sonnet-5", alias="JUDGE_MODEL")
+    judge_provider: Provider = Field(default="openrouter", alias="JUDGE_PROVIDER")
+    # A different vendor from the chat model on purpose — a judge scoring its
+    # own family's output is prone to self-preference bias. OpenRouter makes
+    # cross-vendor judging a one-line change on a single key.
+    judge_model: str = Field(default="openai/gpt-5-mini", alias="JUDGE_MODEL")
     judge_effort: str = Field(default="medium", alias="JUDGE_EFFORT")
     judge_max_tokens: int = Field(default=4000, alias="JUDGE_MAX_TOKENS")
 
     # --- credentials ------------------------------------------------------
+    openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+
+    # --- OpenRouter specifics --------------------------------------------
+    openrouter_base_url: str = Field(
+        default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL"
+    )
+    # Sent as HTTP-Referer / X-Title for OpenRouter's attribution; optional.
+    openrouter_site_url: str | None = Field(
+        default=None, alias="OPENROUTER_SITE_URL"
+    )
+    openrouter_app_title: str = Field(
+        default="Fermi Podcast Companion", alias="OPENROUTER_APP_TITLE"
+    )
+    # Only reasoning-capable models accept a reasoning effort. Off by default
+    # so any of OpenRouter's models can be selected without a 400.
+    openrouter_send_reasoning: bool = Field(
+        default=False, alias="OPENROUTER_SEND_REASONING"
+    )
 
     # --- ASR --------------------------------------------------------------
     asr_provider: LocalOrApi = Field(default="local", alias="ASR_PROVIDER")
@@ -148,6 +171,7 @@ class Settings(BaseSettings):
 
     def api_key_for(self, provider: str) -> str | None:
         return {
+            "openrouter": self.openrouter_api_key,
             "anthropic": self.anthropic_api_key,
             "openai": self.openai_api_key,
         }.get(provider)
@@ -155,8 +179,29 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Process-wide settings singleton."""
-    return Settings()
+    """Process-wide settings singleton.
+
+    A bad value in ``.env`` is a configuration mistake, not a bug, so the
+    pydantic validation error is translated into a message that names the
+    offending variable and the values it accepts.
+    """
+    from pydantic import ValidationError
+
+    from companion.errors import ConfigError
+
+    try:
+        return Settings()
+    except ValidationError as exc:
+        problems = []
+        for error in exc.errors():
+            field = ".".join(str(part) for part in error["loc"]) or "(unknown)"
+            problems.append(f"{field}: {error['msg']} (got {error.get('input')!r})")
+        raise ConfigError(
+            "Your .env has an invalid value:\n  " + "\n  ".join(problems),
+            "Fix the variable in .env — see .env.example for the accepted "
+            "values. CHAT_PROVIDER and JUDGE_PROVIDER must be one of: "
+            "openrouter, anthropic, openai.",
+        ) from exc
 
 
 def reload_settings() -> Settings:

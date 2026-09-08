@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-07T20:24:01.734496+00:00",
+  "timestamp": "2026-09-08T04:40:39.888000+00:00",
   "mode": "retrieval_only",
   "num_cases": 20,
   "passed": 17,
@@ -33,8 +33,8 @@
     "false_refusals": 0
   },
   "latency": {
-    "mean_ms": 569.0,
-    "max_ms": 9541.2
+    "mean_ms": 487.6,
+    "max_ms": 7798.2
   },
   "cost": {
     "estimated_usd": 0.0
@@ -203,5 +203,5 @@
       "pass_rate": 0.6667
     }
   },
-  "elapsed_seconds": 11.7
+  "elapsed_seconds": 10.1
 }

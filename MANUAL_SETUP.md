@@ -21,31 +21,35 @@ The whole system is built, run and verified on this machine:
 - ✅ **Baseline and improved evaluation runs executed**, with raw evidence
   committed under `eval/results/`
 - ✅ **113 tests passing**
+- ✅ **OpenRouter provider** — verified with real API calls on both the chat and
+  judge models; `make models` and `make doctor` validate model ids live
+- ✅ **Full evaluation executed through OpenRouter** — 19/20 (95%), refusal
+  accuracy 4/4, citation validity 100% of 68, measured cost $0.27
 - ✅ `README.md`, `PRODUCT.md`, `EVAL.md`, `SERVICES_REQUIRED.md`, `docs/DEMO.md`
 
 ## What you need to do
 
-### 1. Add an API key  *(required for chat and the full evaluation)*
+### 1. Add your OpenRouter key  *(required for chat and the full evaluation)*
 
 ```bash
-# .env already exists (created by `make setup`)
-open -e .env          # or your editor
+open -e .env          # .env already exists
 ```
 
-Set:
+Set exactly one line:
 
 ```env
-ANTHROPIC_API_KEY=sk-ant-...
+OPENROUTER_API_KEY=sk-or-v1-...
 ```
 
-That is the only credential the system needs. Use the Fermi-provided budget
-key if one was issued. To use OpenAI instead, set `OPENAI_API_KEY` and
-`CHAT_PROVIDER=openai`.
+That is the **only** credential the system needs — no Anthropic or OpenAI
+account. The provider and both models are already configured for OpenRouter.
 
 Verify:
 
 ```bash
-make doctor          # the two "key" rows should turn green
+make doctor          # both "key" rows turn green, and the configured
+                     # CHAT_MODEL / JUDGE_MODEL ids are checked against
+                     # OpenRouter's live catalogue
 ```
 
 ### 2. Swap in the official audio  *(required before submitting)*
@@ -66,20 +70,18 @@ from filenames, and they appear in every citation. A leading track number
 ### 3. Re-run the evaluation on the real audio
 
 ```bash
-make eval-baseline    # dense-only baseline
-make eval-improved    # hybrid + calibrated gate
-make eval             # full pipeline + LLM judge  ← needs the key from step 1
+make eval-baseline    # dense-only baseline      (free)
+make eval-improved    # hybrid + calibrated gate (free)
+make eval             # full pipeline + LLM judge (~$0.27)
 make eval-compare
 ```
 
-Then update the numbers in `EVAL.md` §4 and §7 and in the `README.md` table.
-`EVAL.md` §3 already flags that the committed figures come from the fixture
-corpus, so the honest framing is in place — only the numbers change.
+Then update the numbers in `EVAL.md` §4, §7 and §9, and the two `README.md`
+tables. `EVAL.md` §3 already flags that the committed figures come from the
+fixture corpus, so the honest framing is in place — only the numbers change.
 
-**This step matters most.** `make eval` is the one thing that has not been run,
-and it is what produces the answer-quality evidence (faithfulness, citation
-correctness, clarity) that the rubric weights at 25 points. Estimated cost:
-$0.10–0.20.
+Note that the calibrated refusal gate is recomputed automatically during
+`make ingest`, so it adapts to the real episodes with no manual tuning.
 
 ### 4. Record the demo
 
@@ -105,6 +107,8 @@ git status --porcelain | grep -E '\.env$|\.mp3$' || echo "clean — no secrets o
 ## Optional
 
 - **Faster ingestion:** `ASR_MODEL=small` in `.env` (lower transcript quality).
-- **Higher answer quality:** `CHAT_MODEL=claude-opus-5` (~2.5× the cost).
+- **Higher answer quality:** `CHAT_MODEL=anthropic/claude-opus-5` (~2.5× cost).
+- **Cheaper:** `CHAT_MODEL=openai/gpt-5-mini` (~8× cheaper than Sonnet).
+- **See what else your key can reach:** `make models` / `make models F=gemini`.
 - **Try it without a key first:** `make search Q="your question"` and
   `make eval-retrieval` both work offline.

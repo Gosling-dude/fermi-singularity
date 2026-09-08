@@ -63,10 +63,12 @@ _LOCATE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Deliberately makes no claim beyond the outcome. An earlier version said
+# "I searched the transcripts of every episode…", which the evaluation judge
+# correctly flagged as an assertion the retrieved passages cannot support.
 NOT_COVERED_MESSAGE = (
-    "The supplied episodes don't cover this. I searched the transcripts of "
-    "every episode in this collection and found nothing that speaks to your "
-    "question, so I'd rather tell you that than guess."
+    "The supplied episodes don't cover this — nothing in this collection "
+    "speaks to your question, so I'd rather say so than guess."
 )
 
 
@@ -146,20 +148,24 @@ class CompanionAgent:
 
     # --- query rewriting -------------------------------------------------
     def rewrite_query(
-        self, message: str, session: Session
+        self, message: str, session: Session, *, offline: bool = False
     ) -> tuple[str, LLMResponse | None]:
         """Turn a follow-up into a standalone retrieval query.
 
         A first turn, or a message that already reads as standalone, is used
         as-is: rewriting an already-good query only risks drifting off topic.
         """
+        if offline:
+            # `--retrieval-only` evaluation must make no LLM call at all, so
+            # its numbers are free, reproducible, and identical whether or not
+            # a key happens to be configured.
+            return message, None
         if not self.settings.enable_query_rewrite or not session.is_followup():
             return message, None
         if not _looks_context_dependent(message):
             return message, None
         if not provider_available("chat", self.settings):
-            # Retrieval-only runs have no credentials; the raw message is a
-            # usable fallback query.
+            # No credentials configured; the raw message is a usable fallback.
             return message, None
         try:
             response = self.provider.complete(
@@ -211,7 +217,9 @@ class CompanionAgent:
             )
 
         resolved_mode = mode or detect_mode(message)
-        retrieval_query, rewrite_llm = self.rewrite_query(message, session)
+        retrieval_query, rewrite_llm = self.rewrite_query(
+            message, session, offline=retrieval_only
+        )
         effective_episode = episode_id or session.episode_filter
 
         retrieval = self.retriever.retrieve(

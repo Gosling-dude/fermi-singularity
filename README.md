@@ -80,8 +80,9 @@ audio alone.
 - **Python 3.11+**
 - **FFmpeg** — `brew install ffmpeg` (macOS) / `sudo apt install ffmpeg` (Debian)
 - **~2 GB disk** for the ASR, embedding and reranking models (downloaded once)
-- **An API key** for chat and the evaluation judge — Anthropic or OpenAI.
-  ASR, embeddings, reranking and the vector store all run locally and free.
+- **An API key** for chat and the evaluation judge — **OpenRouter** (default),
+  Anthropic, or OpenAI. ASR, embeddings, reranking and the vector store all run
+  locally and free.
 
 ---
 
@@ -117,6 +118,18 @@ Everything except answer generation still works:
 make search Q="ultraviolet catastrophe"    # hybrid retrieval, free
 make eval-retrieval                        # full offline evaluation, free
 make test
+```
+
+### Providers
+
+The default is **OpenRouter** — one key reaches every vendor, which is what
+makes the cross-vendor judge below a config change rather than a second
+account. Anthropic and OpenAI direct are also supported; set `CHAT_PROVIDER`
+and the matching key.
+
+```bash
+make models              # list every model your key can reach, cheapest first
+make models F=claude     # filter by substring
 ```
 
 ---
@@ -185,6 +198,9 @@ make eval-compare     # baseline vs improved
 evaluation-only code path, no hard-coded answers. Measured result of the one
 headline improvement:
 
+Offline (retrieval + refusal gate, no key, $0) — the measured effect of the one
+headline improvement:
+
 | Metric | Baseline | Improved | Δ |
 |---|---|---|---|
 | Pass rate | 75.0% | 85.0% | **+10.0%** |
@@ -193,8 +209,20 @@ headline improvement:
 | Retrieval: episode hit | 100% | 100% | 0 |
 | Mean latency | 0.01 s | 0.57 s | +0.56 s |
 
+Full pipeline (generation + LLM judge, via OpenRouter):
+
+| Metric | Result |
+|---|---|
+| Pass rate | **19/20 (95%)** |
+| Refusal accuracy | **4/4 (100%)** |
+| Citation validity | **100%** (0 invalid of 68) |
+| Judge faithfulness | 4.85 / 5 |
+| Judge completeness · citations · refusal · clarity | 5.00 / 5 each |
+| Actual cost | $0.27 per run |
+
 Full methodology, three inspected failures, root causes, an attempt that made
-things *worse*, and remaining weaknesses: [`EVAL.md`](EVAL.md).
+things *worse*, two defects the evaluation found in my own harness and product,
+and the one real remaining hallucination: [`EVAL.md`](EVAL.md).
 
 ---
 
@@ -244,8 +272,16 @@ that already stand alone are left untouched, since rewriting a good query only
 risks drifting off topic.
 
 **Providers are swappable.** Chat, query rewriting and the judge all go through
-one `LLMProvider` abstraction; Anthropic and OpenAI are both implemented and
-selected by environment variable.
+one `LLMProvider` abstraction; OpenRouter, Anthropic and OpenAI are implemented
+and selected by environment variable. OpenRouter is an OpenAI-compatible
+endpoint, so it reuses the official SDK pointed at a different base URL rather
+than a bespoke HTTP client, and it reports the **actual** cost of each call,
+which is recorded instead of a locally estimated price.
+
+**The judge runs on a different vendor from the chat model.** A judge grading
+its own family's output is prone to self-preference bias. Defaults are
+`anthropic/claude-sonnet-5` for chat and `openai/gpt-5-mini` for judging — one
+key, two vendors, no extra setup.
 
 ---
 
@@ -258,12 +294,13 @@ selected by environment variable.
 | Reranking (MiniLM cross-encoder) | local CPU | **free** |
 | Vector store (Chroma) + BM25 | local disk | **free** |
 | Offline evaluation | local | **free** |
-| Chat | API | ~$0.005–0.01 per turn (`claude-sonnet-5`) |
-| Full evaluation (20 cases + judge) | API | ~$0.10–0.20 per run |
+| Chat | API | ~$0.015 per turn (`anthropic/claude-sonnet-5`) |
+| Full evaluation (20 cases + judge) | API | **$0.27 per run** (measured) |
 
 Ingestion, indexing, retrieval, refusal and the entire offline evaluation cost
-nothing. The API budget is spent only on generation and judging. Actual token
-counts and cost are recorded in every eval `summary.json`.
+nothing. The API budget is spent only on generation and judging. OpenRouter
+reports the true cost of every call, and it is recorded per case in
+`eval/results/*/raw.jsonl` — the $0.27 above is measured, not estimated.
 
 ---
 
@@ -273,7 +310,9 @@ All settings live in `.env` (see `.env.example`). The ones worth knowing:
 
 | Variable | Default | Notes |
 |---|---|---|
-| `CHAT_PROVIDER` / `CHAT_MODEL` | `anthropic` / `claude-sonnet-5` | `claude-opus-5` for higher quality |
+| `CHAT_PROVIDER` | `openrouter` | or `anthropic` / `openai` direct |
+| `CHAT_MODEL` | `anthropic/claude-sonnet-5` | `make models` lists valid ids |
+| `JUDGE_MODEL` | `openai/gpt-5-mini` | different vendor on purpose |
 | `ASR_MODEL` | `medium` | `small` if ingestion is too slow |
 | `RETRIEVAL_MODE` | `hybrid` | `dense` reproduces the eval baseline |
 | `ENABLE_RERANK` | `true` | `false` falls back to the cosine gate |
@@ -313,13 +352,14 @@ scripts/fixtures/          synthetic dev audio scripts
 
 ## Limitations
 
-- **Answer quality is not yet measured.** The committed evaluation runs cover
-  retrieval and refusal only; the full generation + judge run needs an API key
-  and has not been executed. `EVAL.md` §9 says exactly what that would add.
-- **Two adjacent-topic refusals depend on the prompt**, not the deterministic
-  gate — the largest open risk, and unmeasured for the same reason.
+- **One real hallucination remains.** In `followup_01` the model states Planck
+  "never succeeded" at something the transcript only says he "spent years
+  trying" — true, unsupported, and caught only by the judge. `EVAL.md` §9.2.
 - **Follow-up retrieval is weaker without an API key**, since query rewriting
-  needs the LLM.
+  needs the LLM. `make eval-retrieval` deliberately makes no LLM call at all,
+  so its numbers are reproducible but pessimistic about follow-ups.
+- **The judge is unvalidated** against human labels, so treat its scores as a
+  signal rather than a verdict.
 - **The committed numbers come from a 20-minute synthetic fixture corpus**, not
   the Fermi episodes. Re-run `make ingest && make eval-baseline &&
   make eval-improved` on the real audio to regenerate them.

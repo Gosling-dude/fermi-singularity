@@ -1,20 +1,20 @@
 {
-  "timestamp": "2026-09-08T04:40:21.587438+00:00",
-  "mode": "retrieval_only",
+  "timestamp": "2026-09-08T04:38:24.211717+00:00",
+  "mode": "full",
   "num_cases": 20,
-  "passed": 15,
-  "pass_rate": 0.75,
+  "passed": 19,
+  "pass_rate": 0.95,
   "errors": 0,
   "config": {
-    "retrieval_mode": "dense",
+    "retrieval_mode": "hybrid",
     "query_rewrite": true,
     "compare_mode": true,
     "top_k": 5,
     "dense_k": 20,
     "bm25_k": 20,
     "min_relevance": 0.3,
-    "chat_model": null,
-    "judge_model": null,
+    "chat_model": "anthropic/claude-sonnet-5",
+    "judge_model": "openai/gpt-5-mini",
     "embed_model": "BAAI/bge-small-en-v1.5",
     "chunk_target_seconds": 75.0
   },
@@ -24,20 +24,20 @@
   },
   "retrieval": {
     "mean_episode_hit": 1.0,
-    "mean_term_coverage": 0.9062,
-    "mean_top_score": 0.016393
+    "mean_term_coverage": 0.9375,
+    "mean_top_score": 0.029907
   },
   "refusal": {
     "num_refusal_cases": 4,
-    "refusal_accuracy": 0.0,
+    "refusal_accuracy": 1.0,
     "false_refusals": 0
   },
   "latency": {
-    "mean_ms": 12.2,
-    "max_ms": 130.8
+    "mean_ms": 8564.5,
+    "max_ms": 16495.2
   },
   "cost": {
-    "estimated_usd": 0.0
+    "estimated_usd": 0.273465
   },
   "per_category": {
     "factual": {
@@ -137,38 +137,30 @@
     },
     "refusal": {
       "total": 4,
-      "passed": 0,
+      "passed": 4,
       "cases": [
         {
           "id": "refusal_01",
-          "passed": false,
-          "failures": [
-            "evidence gate did not fire for an out-of-scope question (max similarity 0.396)"
-          ]
+          "passed": true,
+          "failures": []
         },
         {
           "id": "refusal_02",
-          "passed": false,
-          "failures": [
-            "evidence gate did not fire for an out-of-scope question (max similarity 0.638)"
-          ]
+          "passed": true,
+          "failures": []
         },
         {
           "id": "refusal_03",
-          "passed": false,
-          "failures": [
-            "evidence gate did not fire for an out-of-scope question (max similarity 0.633)"
-          ]
+          "passed": true,
+          "failures": []
         },
         {
           "id": "refusal_04",
-          "passed": false,
-          "failures": [
-            "evidence gate did not fire for an out-of-scope question (max similarity 0.693)"
-          ]
+          "passed": true,
+          "failures": []
         }
       ],
-      "pass_rate": 0.0
+      "pass_rate": 1.0
     },
     "ambiguous": {
       "total": 1,
@@ -188,15 +180,13 @@
       "cases": [
         {
           "id": "followup_01",
-          "passed": true,
+          "passed": false,
           "failures": []
         },
         {
           "id": "followup_02",
-          "passed": false,
-          "failures": [
-            "retrieved passages covered only 0% of the expected terms"
-          ]
+          "passed": true,
+          "failures": []
         },
         {
           "id": "followup_03",
@@ -207,5 +197,23 @@
       "pass_rate": 0.6667
     }
   },
-  "elapsed_seconds": 0.3
+  "elapsed_seconds": 408.7,
+  "citations": {
+    "mean_validity": 1.0,
+    "total": 68,
+    "invalid": 0
+  },
+  "hallucination": {
+    "forbidden_claim_violations": 0,
+    "judge_unsupported_claims": 2
+  },
+  "judge": {
+    "num_judged": 20,
+    "judge_pass_rate": 0.95,
+    "mean_faithfulness": 4.85,
+    "mean_completeness": 5.0,
+    "mean_citation_correctness": 5.0,
+    "mean_refusal_correctness": 5.0,
+    "mean_clarity": 5.0
+  }
 }

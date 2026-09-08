@@ -117,6 +117,15 @@ make eval-compare
 > threshold calibrated from the corpus itself at ingestion time rather than
 > tuned on these cases. 75% to 85%, refusal 0% to 50%, zero false refusals."
 
+Then, optionally, show the full run:
+```bash
+python -m eval.report --show run_full_openrouter | head -30
+```
+> "That's the offline layer. With generation and an LLM judge on top —
+> different vendor from the chat model, so it isn't grading its own family —
+> it's 19 out of 20, refusal 4 out of 4, and 100% citation validity across 68
+> citations. 27 cents a run."
+
 > "My first attempt at this made it *worse* — 6 false refusals. That run is
 > still in `eval/results/run_rerank_only/`, and the analysis is in EVAL.md."
 
@@ -124,8 +133,11 @@ make eval-compare
 
 ### 8 · Close (15s)
 
-> "113 tests. Everything except generation runs locally and free — ASR,
-> embeddings, reranking, vector store, and the whole offline evaluation.
-> Honest gaps are in EVAL.md section 8: the two adjacent-topic refusals still
-> rely on the prompt rather than the gate, and I haven't yet run the full
-> judged evaluation."
+> "Everything except generation runs locally and free — ASR, embeddings,
+> reranking, vector store, and the whole offline evaluation. One key,
+> OpenRouter, for chat and the judge."
+
+> "And one honest gap, in EVAL.md 9.2: there's a case where the model says
+> Planck 'never succeeded' at something the transcript only says he 'spent
+> years trying'. True, unsupported, and no deterministic check caught it —
+> only the judge did. That's the most useful open problem in the system."

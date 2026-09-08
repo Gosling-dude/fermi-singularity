@@ -203,3 +203,17 @@ def test_anthropic_provider_never_sends_temperature():
         __import__("companion.chat.providers", fromlist=["x"]).AnthropicProvider
     )
     assert 'kwargs["temperature"]' not in source
+
+
+def test_retrieval_only_makes_no_llm_call_even_with_a_key(agent):
+    """`--retrieval-only` must stay free and reproducible.
+
+    If rewriting fired whenever a key happened to be present, the offline
+    evaluation numbers would silently depend on the environment.
+    """
+    built = agent(["must not be used", "must not be used"])
+    session = Session()
+    built.ask("What is the main idea?", session, retrieval_only=True)
+    built.ask("Explain that more simply.", session, retrieval_only=True)
+    assert built._provider.calls == []
+    assert session.turns[-1].retrieval_query == "Explain that more simply."
