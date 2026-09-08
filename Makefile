@@ -73,20 +73,20 @@ test: ## Run the test suite
 	@$(PY) -m pytest -q
 
 eval: ## Full evaluation: pipeline + LLM judge  (needs an API key)
-	@$(PY) -m eval.runner
+	@$(PY) -m eval.runner --label fermi_full
 
 eval-retrieval: ## Offline evaluation of retrieval + refusal (no API key, free)
 	@$(PY) -m eval.runner --retrieval-only
 
 eval-baseline: ## Reproduce the baseline run (dense-only, no reranking)
 	@RETRIEVAL_MODE=dense ENABLE_RERANK=false \
-	  $(PY) -m eval.runner --retrieval-only --label run_baseline
+	  $(PY) -m eval.runner --retrieval-only --label fermi_baseline
 
 eval-improved: ## Reproduce the improved run (hybrid + calibrated relevance gate)
-	@$(PY) -m eval.runner --retrieval-only --label run_improved
+	@$(PY) -m eval.runner --retrieval-only --label fermi_improved
 
 eval-compare: ## Compare baseline against improved
-	@$(PY) -m eval.report run_baseline run_improved
+	@$(PY) -m eval.report fermi_baseline fermi_improved
 
 demo: ## Print the demo script
 	@cat docs/DEMO.md
@@ -98,4 +98,4 @@ clean: ## Remove caches and build artefacts
 
 clean-data: ## Delete all generated data (forces a full re-ingest)
 	@rm -rf data/transcripts data/chunks data/index data/normalized data/manifest.json
-	@echo "data/ cleared — run `make ingest` to rebuild"
+	@echo 'data/ cleared — run make ingest to rebuild'

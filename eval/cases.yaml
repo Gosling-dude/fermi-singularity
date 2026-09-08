@@ -1,5 +1,11 @@
 # Evaluation cases for the Fermi Podcast Companion.
 #
+# These cases are written against the three supplied Fermi "Great Papers"
+# episodes, from this system's own faster-whisper transcripts of the raw MP3s.
+# Every `must_retrieve` term below was verified to appear in the real
+# transcript text, and every `forbidden_claims` entry was verified NOT to
+# appear in any of the three transcripts.
+#
 # Each case is run through the real production pipeline — the same retriever,
 # the same agent, the same prompts. Nothing here is answered by a fixture.
 #
@@ -29,161 +35,167 @@ cases:
   # ---- factual: answerable from a single episode ----------------------
   - id: factual_01
     category: factual
-    input: "What did Planck assume about the oscillators in the cavity walls?"
+    input: "What bothered Einstein about the magnet and conductor example?"
     expected:
-      episode: "01_the_birth_of_the_quantum"
-      must_retrieve: ["oscillator", "discrete", "frequency"]
+      episode: "great_papers_01_einstein_s_special_relativity"
+      must_retrieve: ["magnet", "asymmetry", "relative motion"]
       key_points:
-        - "their energy came in discrete lumps / whole-number multiples of a basic unit"
-        - "the unit was proportional to frequency (E = h f)"
+        - "the same current gets two completely different explanations depending on which object you call moving"
+        - "one story is an induced electric field, the other a magnetic force on moving charges"
+        - "the asymmetry is in the description, not in nature — only relative motion matters"
     must_cite: true
-    forbidden_claims: ["Bose-Einstein", "photon gas", "Compton"]
+    forbidden_claims: ["1831", "Lorentz force", "four-vector"]
 
   - id: factual_02
     category: factual
-    input: "Why did Shannon say the meaning of a message is irrelevant?"
+    input: "What is the lowest match rate a local realist machine can produce in Bell's argument?"
     expected:
-      episode: "02_shannon_and_the_birth_of_information"
-      must_retrieve: ["semantic", "engineering"]
+      episode: "great_papers_09_bell_s_theorem_1964"
+      must_retrieve: ["five-ninths", "56"]
       key_points:
-        - "the semantic aspects are irrelevant to the engineering problem"
-        - "what matters is how much the message could have been otherwise"
+        - "at least five-ninths, about 56%, averaged over all the settings"
+        - "that floor follows from counting the eight possible instruction lists"
+        - "the real experiment comes in at 50%, under the floor"
     must_cite: true
-    forbidden_claims: ["Kolmogorov", "Hartley 1928"]
+    forbidden_claims: ["CHSH", "Tsirelson", "2.828"]
 
   - id: factual_03
     category: factual
-    input: "What assumptions does Bell's theorem actually rest on?"
+    input: "Why did Dirac have to use matrices instead of ordinary numbers?"
     expected:
-      episode: "03_bells_theorem"
-      must_retrieve: ["locality", "hidden variables"]
+      episode: "great_papers_12_the_dirac_equation_and_antimatter_1928"
+      must_retrieve: ["matrices", "cross terms", "first order"]
       key_points:
-        - "realism / hidden variables determining outcomes in advance"
-        - "locality — no faster-than-light influence between measurements"
-        - "measurement independence (freedom of choice); superdeterminism evades it"
+        - "he needed to take a square root of the energy-momentum relation"
+        - "with ordinary numbers the cross terms cannot cancel, because A times B equals B times A"
+        - "matrices do not commute, so the cross terms can be made to cancel"
+        - "the smallest matrices that work are 4x4"
     must_cite: true
-    forbidden_claims: ["CHSH", "Tsirelson"]
+    forbidden_claims: ["Clifford", "Pauli", "anticommut"]
 
   - id: factual_04
     category: factual
-    input: "What is the numerical value of Planck's constant given in the episode?"
+    input: "At what speed does the relativity episode say gamma reaches 2?"
     expected:
-      episode: "01_the_birth_of_the_quantum"
-      must_retrieve: ["constant"]
+      episode: "great_papers_01_einstein_s_special_relativity"
+      must_retrieve: ["gamma", "87"]
       key_points:
-        - "about 6.626 x 10^-34 joule seconds"
+        - "at about 87% of the speed of light"
+        - "at that speed moving clocks run at half speed"
     must_cite: true
-    forbidden_claims: ["1.055", "reduced Planck", "h-bar"]
+    forbidden_claims: ["0.866", "Lorentz factor"]
 
   # ---- cross-episode comparison ---------------------------------------
   - id: cross_01
     category: cross_episode
-    input: "How do the Shannon and Bell episodes differ in what they mean by uncertainty?"
+    input: "How do the relativity and Bell episodes each treat the idea that nothing outruns light?"
     expected:
       episodes:
-        - "02_shannon_and_the_birth_of_information"
-        - "03_bells_theorem"
-      must_retrieve: ["noise", "uncertainty"]
+        - "great_papers_01_einstein_s_special_relativity"
+        - "great_papers_09_bell_s_theorem_1964"
+      must_retrieve: ["faster than light", "speed of light"]
       key_points:
-        - "Shannon: uncertainty is ignorance about what was sent, reducible in principle"
-        - "Bell: the randomness is not ignorance of a pre-existing fact"
-        - "the episode notes this comparison is still argued about"
+        - "relativity: the limit comes from velocity addition and the diverging energy cost"
+        - "Bell: entangled correlations are instant but carry no usable signal, so the limit survives"
+        - "the Bell episode explicitly says relativity's speed limit is safe"
     must_cite: true
-    forbidden_claims: ["Heisenberg uncertainty principle", "1927"]
+    forbidden_claims: ["tachyon", "wormhole", "Alcubierre"]
 
   - id: cross_02
     category: cross_episode
-    input: "Compare how these episodes treat the idea that something continuous is really made of discrete units."
+    input: "Compare how these episodes use E = mc squared."
     expected:
       episodes:
-        - "01_the_birth_of_the_quantum"
-        - "02_shannon_and_the_birth_of_information"
-      must_retrieve: ["discrete", "bit"]
+        - "great_papers_01_einstein_s_special_relativity"
+        - "great_papers_12_the_dirac_equation_and_antimatter_1928"
+      must_retrieve: ["mc squared", "annihilate"]
       key_points:
-        - "Planck: energy comes in packets / quanta"
-        - "Shannon: information has a natural unit, the bit"
-        - "Planck disbelieved his own result; Shannon knew what he had"
+        - "relativity: it is derived in a short September 1905 follow-up, not the main paper"
+        - "relativity: emitting energy costs a body mass; mass measures energy content"
+        - "Dirac: matter meeting antimatter converts mass entirely into energy — the most literal case"
     must_cite: true
-    forbidden_claims: ["Planck length", "qubit"]
+    forbidden_claims: ["nuclear fission", "Hiroshima", "binding energy"]
 
   - id: cross_03
     category: cross_episode
-    input: "Do any of these episodes reference each other's ideas?"
+    input: "Which of these episodes mention CERN, and what is it doing in each?"
     expected:
       episodes:
-        - "01_the_birth_of_the_quantum"
-        - "03_bells_theorem"
-      must_retrieve: ["Planck", "Bell"]
+        - "great_papers_09_bell_s_theorem_1964"
+        - "great_papers_12_the_dirac_equation_and_antimatter_1928"
+      must_retrieve: ["CERN"]
       key_points:
-        - "the Planck episode forward-references Bell and Shannon"
-        - "the Bell episode traces an arc back to the 1900 paper"
+        - "Bell episode: Bell's day job was designing particle accelerators at CERN in Geneva"
+        - "Dirac episode: CERN routinely produces antiprotons and builds anti-hydrogen atoms"
+        - "distinguishes the two roles rather than blending them"
     must_cite: true
-    forbidden_claims: []
+    forbidden_claims: ["Large Hadron Collider", "1954", "Higgs"]
 
   # ---- concept explanation --------------------------------------------
   - id: explain_01
     category: explanation
-    input: "Explain the ultraviolet catastrophe simply, like I'm new to this."
+    input: "Explain the twin paradox simply, like I'm new to this."
     expected:
-      episode: "01_the_birth_of_the_quantum"
-      must_retrieve: ["ultraviolet catastrophe", "infinite"]
+      episode: "great_papers_01_einstein_s_special_relativity"
+      must_retrieve: ["twin", "turnaround"]
       key_points:
-        - "classical physics predicts infinite radiated energy"
-        - "the problem is at short / ultraviolet wavelengths"
-        - "the nickname came later, from Ehrenfest in 1911"
+        - "the travelling twin comes back genuinely younger"
+        - "the symmetry breaks because only one of them turns around and feels it"
+        - "at the turnaround the traveller's line of simultaneity swings and Earth's clock races forward"
     must_cite: true
-    forbidden_claims: ["Stefan-Boltzmann law", "Wien displacement"]
+    forbidden_claims: ["general relativity solves", "Langevin"]
 
   - id: explain_02
     category: explanation
-    input: "What is channel capacity and why was Shannon's result surprising?"
+    input: "What was the Dirac Sea and why don't physicists use it any more?"
     expected:
-      episode: "02_shannon_and_the_birth_of_information"
-      must_retrieve: ["capacity", "noise"]
+      episode: "great_papers_12_the_dirac_equation_and_antimatter_1928"
+      must_retrieve: ["Dirac Sea", "negative energy"]
       key_points:
-        - "capacity is a rate in bits per second for a noisy channel"
-        - "below capacity, error can be made as small as you like"
-        - "surprising because noise sets a speed limit, not an accuracy limit"
+        - "all negative energy states imagined as already filled, so ordinary electrons cannot fall in"
+        - "a hole in that sea looks like a positive-energy, positive-charge particle"
+        - "Feynman's reading — an antiparticle as a particle moving backward in time — is cleaner and needs no infinite ocean"
     must_cite: true
-    forbidden_claims: ["Nyquist", "signal-to-noise ratio formula"]
+    forbidden_claims: ["renormalization", "vacuum expectation"]
 
   # ---- recommendation --------------------------------------------------
   - id: recommend_01
     category: recommendation
-    input: "Which episode should I listen to if I want to understand entropy, and why?"
+    input: "Which episode should I listen to if I want to hear about a prediction that experiment confirmed years later, and why?"
     expected:
       episodes:
-        - "01_the_birth_of_the_quantum"
-        - "02_shannon_and_the_birth_of_information"
-      must_retrieve: ["entropy"]
+        - "great_papers_01_einstein_s_special_relativity"
+        - "great_papers_12_the_dirac_equation_and_antimatter_1928"
+      must_retrieve: ["predicted", "1932"]
       key_points:
-        - "the Shannon episode defines entropy as a measure of information"
-        - "the Planck episode touches entropy via Boltzmann's statistical method"
+        - "the Dirac episode is the strongest case — the positron was predicted then found in 1932, four years later"
+        - "the relativity episode also has confirmations: muons, atomic clocks on airliners"
         - "recommends one and says why, rather than listing everything"
     must_cite: true
-    forbidden_claims: ["second law of thermodynamics states"]
+    forbidden_claims: ["Nobel Prize in 1921", "photoelectric"]
 
   # ---- audio location --------------------------------------------------
   - id: locate_01
     category: locate
-    input: "Take me to the part where they explain what a bit is."
+    input: "Take me to the part where they explain the light clock."
     expected:
-      episode: "02_shannon_and_the_birth_of_information"
-      must_retrieve: ["bit", "Tukey"]
+      episode: "great_papers_01_einstein_s_special_relativity"
+      must_retrieve: ["light clock", "mirrors"]
       key_points:
-        - "identifies a specific passage with a timestamp"
-        - "briefly says what is discussed there"
+        - "identifies the passage with two mirrors and a bouncing light pulse"
+        - "gives a usable timestamp"
     must_cite: true
     forbidden_claims: []
 
   - id: locate_02
     category: locate
-    input: "Where in the audio do they talk about the experiments that tested Bell's inequality?"
+    input: "Where in the audio do they talk about closing the experimental loopholes?"
     expected:
-      episode: "03_bells_theorem"
-      must_retrieve: ["Aspect", "loophole"]
+      episode: "great_papers_09_bell_s_theorem_1964"
+      must_retrieve: ["loophole", "Aspect"]
       key_points:
-        - "points to the passage covering Freedman-Clauser, Aspect and the 2015 tests"
+        - "points to the passage on the locality and detection loopholes"
+        - "mentions the 2015 loophole-free tests"
         - "gives a usable timestamp"
     must_cite: true
     forbidden_claims: []
@@ -218,73 +230,75 @@ cases:
 
   - id: refusal_04
     category: refusal
-    input: "What did Planck say about the double-slit experiment in this episode?"
+    input: "What does the Dirac episode say about the Higgs boson giving particles their mass?"
     expected:
       refusal: true
       key_points:
-        - "states the episode does not discuss the double-slit experiment"
-        - "does not fabricate a Planck quote about it"
+        - "states the episode does not discuss the Higgs boson"
+        - "does not fabricate a Dirac-episode claim about it"
     must_cite: false
-    forbidden_claims: ["interference pattern", "wave-particle duality", "Young"]
+    forbidden_claims: ["Higgs field", "Large Hadron Collider", "2012", "boson"]
 
   # ---- ambiguous --------------------------------------------------------
   - id: ambiguous_01
     category: ambiguous
-    input: "What does he mean by entropy?"
+    input: "What does he mean by spin?"
     expected:
       clarify_ok: true
       episodes:
-        - "01_the_birth_of_the_quantum"
-        - "02_shannon_and_the_birth_of_information"
-      must_retrieve: ["entropy"]
+        - "great_papers_09_bell_s_theorem_1964"
+        - "great_papers_12_the_dirac_equation_and_antimatter_1928"
+      must_retrieve: ["spin"]
       key_points:
-        - "recognises that two episodes use entropy differently"
+        - "recognises that two episodes use spin differently"
+        - "Bell: spin as the up/down measurement outcome that is random and anti-correlated"
+        - "Dirac: spin one-half as something forced out of the equation, not assumed"
         - "either asks which is meant, or answers both clearly scoped"
     must_cite: true
-    forbidden_claims: []
+    forbidden_claims: ["angular momentum quantum number", "hbar/2"]
 
   # ---- multi-turn follow-up --------------------------------------------
   - id: followup_01
     category: followup
     turns:
-      - "What is the main idea of the Planck episode?"
-      - "Explain that act of desperation part more simply."
+      - "What is the main idea of the relativity episode?"
+      - "Explain that bit about changing the stage more simply."
     expected:
-      episode: "01_the_birth_of_the_quantum"
-      must_retrieve: ["desperation"]
+      episode: "great_papers_01_einstein_s_special_relativity"
+      must_retrieve: ["stage"]
       key_points:
-        - "resolves 'that' to Planck's quantum assumption"
-        - "explains he adopted it reluctantly, as a bookkeeping device"
-        - "notes he had to concede to Boltzmann's statistical method"
+        - "resolves 'that' to the 'he changed the stage, not the light' idea"
+        - "others tried to modify light, matter or invent a mechanism"
+        - "Einstein kept light's speed fixed and made space and time flexible instead"
     must_cite: true
-    forbidden_claims: ["Copenhagen interpretation"]
+    forbidden_claims: ["Copenhagen interpretation", "curved spacetime"]
 
   - id: followup_02
     category: followup
     turns:
-      - "Tell me about Shannon's noisy channel theorem."
-      - "Why couldn't engineers actually use it at the time?"
+      - "Tell me about Bell's inequality."
+      - "Does that mean we can send signals faster than light?"
     expected:
-      episode: "02_shannon_and_the_birth_of_information"
-      must_retrieve: ["non constructive", "codes"]
+      episode: "great_papers_09_bell_s_theorem_1964"
+      must_retrieve: ["faster than light", "random"]
       key_points:
-        - "the proof is non-constructive — it shows good codes exist"
-        - "it does not tell you how to build one"
-        - "practical codes came decades later (turbo codes, LDPC)"
+        - "no — you cannot send a message, not a bit"
+        - "your own outcome is random and uncontrollable, so it carries nothing"
+        - "the correlation only shows up when the two result lists are compared over an ordinary channel"
     must_cite: true
-    forbidden_claims: ["Reed-Solomon", "Hamming code"]
+    forbidden_claims: ["no-communication theorem", "Bell state"]
 
   - id: followup_03
     category: followup
     turns:
-      - "What is Bell's theorem about?"
-      - "Does that mean we can send messages faster than light?"
+      - "What did Dirac's equation predict that nobody had seen?"
+      - "How long did it take before someone actually found it?"
     expected:
-      episode: "03_bells_theorem"
-      must_retrieve: ["signalling", "faster than light"]
+      episode: "great_papers_12_the_dirac_equation_and_antimatter_1928"
+      must_retrieve: ["1932", "Anderson"]
       key_points:
-        - "no — the no-signalling result rules it out"
-        - "each side's results look like random noise on their own"
-        - "correlations only appear when results are compared"
+        - "four years — the 1928 paper, the positron found in 1932"
+        - "Carl Anderson photographing cosmic rays in a cloud chamber"
+        - "tracks curved the opposite way, meaning positive charge with the electron's mass"
     must_cite: true
-    forbidden_claims: ["quantum teleportation", "wormhole"]
+    forbidden_claims: ["Nobel Prize in 1936", "Blackett"]

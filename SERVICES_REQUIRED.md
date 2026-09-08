@@ -4,7 +4,7 @@ What this system actually depends on, as built.
 
 | Service | Required? | Purpose | API key | Local alternative | Cost |
 |---|---|---|---|---|---|
-| **OpenRouter** | **Yes** *(default)* | Answer generation, follow-up query rewriting, evaluation judge — one key reaches every vendor | `OPENROUTER_API_KEY` | none — this is the only paid dependency | ~$0.015/turn; **$0.27** per full eval run (measured) |
+| **OpenRouter** | **Yes** *(default)* | Answer generation, follow-up query rewriting, evaluation judge — one key reaches every vendor | `OPENROUTER_API_KEY` | none — this is the only paid dependency | ~$0.015/turn; **$0.30** per full eval run (measured) |
 | Anthropic *(direct)* | Optional | Alternative chat/judge provider | `ANTHROPIC_API_KEY` | use OpenRouter instead | ~$0.015/turn |
 | OpenAI *(direct)* | Optional | Alternative chat/judge provider; optional Whisper ASR and embeddings | `OPENAI_API_KEY` | use OpenRouter; local for ASR/embeddings | ~$0.005/turn |
 | **faster-whisper** (ASR) | Yes | Transcribes the raw audio — *this is our own ASR pass* | No | — *is* the local option | **Free** |

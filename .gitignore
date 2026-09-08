@@ -9,12 +9,14 @@
 audio/*
 !audio/README.md
 
-# Generated pipeline artefacts — reproducible with `make ingest`
+# Generated pipeline artefacts.
+#
+# data/index, data/chunks and data/manifest.json ARE committed: they are the
+# only things the *server* needs at runtime (~3.5 MB), so committing them lets
+# a container be built straight from this repo with no ASR step. Everything
+# else is a large, purely intermediate by-product of `make ingest`.
 data/transcripts/
-data/chunks/
-data/index/
 data/normalized/
-data/manifest.json
 
 # Evaluation runs: the baseline and improved runs are committed as evidence;
 # ad-hoc timestamped runs are not.
@@ -36,6 +38,13 @@ dist/
 .cache/
 *.pt
 *.bin
+# ...but Chroma stores its HNSW vectors as .bin inside the committed index,
+# and excluding them would ship a silently broken index.
+!data/index/**/*.bin
 
-# OS
+# OS / editors
 .DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

@@ -22,6 +22,14 @@ from companion.ingest.pipeline import _asr_fingerprint, load_manifest, save_mani
          "The Birth of the Quantum"),
         ("shannon_information.mp3", "shannon_information", "Shannon Information"),
         ("Bell's Theorem — 1964.mp3", "bell_s_theorem_1964", "Bell's Theorem — 1964"),
+        # The real supplied filenames: the separator between the series/track
+        # prefix and the title is a hyphen, which becomes a space in the title.
+        ("Great Papers 01 - Einstein's Special Relativity.mp3",
+         "great_papers_01_einstein_s_special_relativity",
+         "Great Papers 01 Einstein's Special Relativity"),
+        ("Great Papers 09 - Bell's Theorem, 1964.mp3",
+         "great_papers_09_bell_s_theorem_1964",
+         "Great Papers 09 Bell's Theorem, 1964"),
     ],
 )
 def test_identity_is_derived_from_the_filename(filename, episode_id, title):

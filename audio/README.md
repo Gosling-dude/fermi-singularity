@@ -17,10 +17,13 @@ Episode titles are derived from filenames, so name the files the way you want
 them to appear in the product and in citations:
 
 ```
-audio/The Birth of the Quantum.mp3
-audio/Shannon and the Birth of Information.mp3
-audio/Bell's Theorem.mp3
+audio/Great Papers 01 - Einstein's Special Relativity.mp3
+audio/Great Papers 09 - Bell's Theorem, 1964.mp3
+audio/Great Papers 12 - The Dirac Equation and Antimatter, 1928.mp3
 ```
+
+Those three — 1 h 59 m in total — are what the committed results in
+`eval/results/fermi_*` were measured on.
 
 A leading track number (`01 - Title.mp3`) is stripped automatically.
 

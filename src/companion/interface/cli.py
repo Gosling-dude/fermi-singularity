@@ -35,11 +35,13 @@ HELP_TEXT = """\
   /quit                exit
 
 [bold]Things worth asking[/bold]
-  What is the main idea of the Planck episode?
-  Explain that more simply.
-  How do these episodes differ in how they treat uncertainty?
-  Which episode should I start with to understand entropy?
-  Take me to the part where they explain the ultraviolet catastrophe.
+  What bothered Einstein about the magnet and conductor example?
+  Explain that more simply.                          (follow-up, uses context)
+  How does Bell get to five-ninths?
+  Why did Dirac need matrices in his equation?
+  Compare how these episodes use E = mc squared.     (spans two episodes)
+  Which episode should I start with to understand antimatter?
+  Take me to the part where they explain the light clock.
   What do these episodes say about dark matter?      (correctly refused)
 """
 

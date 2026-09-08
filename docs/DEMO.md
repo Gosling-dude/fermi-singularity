@@ -3,6 +3,10 @@
 Two terminals: one for the product, one for the evaluation.
 `make ingest` should already have been run.
 
+The corpus is the three supplied Fermi episodes — Einstein's Special
+Relativity (52:14), Bell's Theorem (34:00) and The Dirac Equation and
+Antimatter (33:00). 1 h 59 m of audio, transcribed by this system.
+
 ---
 
 ### 0 · Setup (10s) — say this over the repo
@@ -23,11 +27,12 @@ Shows the ingested collection with durations and passage counts.
 make ingest
 ```
 > "Re-running is a no-op — it's keyed on the SHA-256 of each file, so it reuses
-> the transcripts. The first run transcribed 20 minutes of audio in about 7."
+> the transcripts. The first run transcribed two hours of audio in 41 minutes,
+> about 3× realtime on CPU."
 
-Point at `data/transcripts/01_the_birth_of_the_quantum.txt`:
-> "That's our own Whisper output with timestamps. No external captions
-> anywhere in this system."
+Point at `data/transcripts/great_papers_01_einstein_s_special_relativity.txt`:
+> "That's our own Whisper output with timestamps — 594 segments for this
+> episode. No external captions anywhere in this system."
 
 ---
 
@@ -37,38 +42,44 @@ Point at `data/transcripts/01_the_birth_of_the_quantum.txt`:
 make chat
 ```
 ```
-Why did Planck introduce the quantum idea?
+What are Einstein's two postulates?
 ```
-> "Answer first, then inline citations, then sources with timestamps."
+> "Answer first, then inline citations, then sources with timestamps. Six
+> citations here, every one of them pointing at a real interval of speech you
+> can go and listen to."
 
 ---
 
 ### 3 · A multi-turn follow-up (20s)
 
 ```
-Explain that act of desperation part more simply.
+Why does that second one break common sense?
 ```
-> "'That' resolves from the conversation — it's rewritten into a standalone
-> search query before retrieval, not just pasted in."
+> "'That second one' resolves from the conversation — it's rewritten into a
+> standalone search query before retrieval, not just pasted in. Watch the
+> retrieval_query in the logs."
 
 ---
 
 ### 4 · Cross-episode comparison (25s)
 
 ```
-How do the Shannon and Bell episodes differ in what they mean by uncertainty?
+Compare how each of these episodes portrays Einstein.
 ```
 > "Comparison mode balances retrieval across episodes, so one strong match
-> can't crowd out the other side. Note the sources span two episodes."
+> can't crowd out the other side. Einstein is the triumphant architect in the
+> relativity episode and the man who turned out to be wrong in the Bell
+> episode — and the sources span both."
 
 ---
 
 ### 5 · Take me to the audio (20s)
 
 ```
-Take me to the part where they explain what a bit is.
+Where in the audio do they talk about muons?
 ```
-> "Episode plus timestamp."
+> "Episode plus timestamp — around 20:37 in the relativity episode, where the
+> sky is running the time-dilation experiment for free."
 
 Then switch to the web UI:
 ```bash
@@ -82,18 +93,20 @@ Ask the same thing, **click a source** — the player seeks to that second.
 ### 6 · Honest refusal — the important one (30s)
 
 ```
-What do these episodes say about how superconductivity works?
+What do these episodes say about dark matter?
 ```
 > "Not covered. And notice it was instant — no model call was made. A
 > calibrated relevance gate refused before spending a token."
 
 Then the harder one:
 ```
-What did Planck say about the double-slit experiment in this episode?
+What does the relativity episode say about black hole event horizons?
 ```
-> "This one is nastier — it names a real thing from the episode and a real
-> physics concept the episode never mentions. The model knows the answer. It
-> still says the episodes don't cover it."
+> "This one is nastier — it names a real episode from the collection and a real
+> physics concept the episode never mentions. The model knows the answer. The
+> gate deliberately does *not* fire here, because the question is topically
+> adjacent; the grounding prompt reads the passages and refuses instead —
+> listing what the episode *does* cover. Two layers, different jobs."
 
 ---
 
@@ -105,29 +118,30 @@ make eval-compare
 ```
 > "20 cases, 8 categories, run through the real agent — no evaluation-only code
 > path. Baseline was naive RAG: dense retrieval, cosine threshold for refusal.
-> 75% pass, and refusal accuracy zero out of four."
+> 70% pass, and refusal accuracy zero out of four."
 
 > "I inspected the failures. The problem was that cosine similarity measures
 > whether things are about the same topic, not whether a passage answers the
-> question — so 'what did Planck say about the double slit' scored *higher*
-> than legitimate questions. The distributions genuinely overlap, so no
-> threshold could work."
+> question. The distributions genuinely overlap, so no threshold could work."
 
 > "The fix: a cross-encoder that reads query and passage together, with the
 > threshold calibrated from the corpus itself at ingestion time rather than
-> tuned on these cases. 75% to 85%, refusal 0% to 50%, zero false refusals."
+> tuned on these cases. 70% to 90%, refusal 0% to 75%. It cost one regression,
+> and I left it in the table rather than hiding it — `followup_03` needs query
+> rewriting to have a topical anchor, and the offline mode makes no LLM call."
 
 Then, optionally, show the full run:
 ```bash
-python -m eval.report --show run_full_openrouter | head -30
+python -m eval.report --show fermi_full | head -30
 ```
 > "That's the offline layer. With generation and an LLM judge on top —
 > different vendor from the chat model, so it isn't grading its own family —
-> it's 19 out of 20, refusal 4 out of 4, and 100% citation validity across 68
-> citations. 27 cents a run."
+> the numbers are in EVAL.md §9, including 100% citation validity."
 
-> "My first attempt at this made it *worse* — 6 false refusals. That run is
-> still in `eval/results/run_rerank_only/`, and the analysis is in EVAL.md."
+> "The `synthetic_*` runs in `eval/results/` are from the development fixture
+> corpus, before the real audio arrived. They're kept for provenance and
+> clearly separated — in particular `synthetic_rerank_only`, a change that made
+> things worse and got reverted."
 
 ---
 
@@ -137,7 +151,10 @@ python -m eval.report --show run_full_openrouter | head -30
 > reranking, vector store, and the whole offline evaluation. One key,
 > OpenRouter, for chat and the judge."
 
-> "And one honest gap, in EVAL.md 9.2: there's a case where the model says
-> Planck 'never succeeded' at something the transcript only says he 'spent
-> years trying'. True, unsupported, and no deterministic check caught it —
-> only the judge did. That's the most useful open problem in the system."
+> "And the honest gaps are written down in EVAL.md §8 — including one the real
+> audio exposed that the synthetic corpus never could: Whisper hears
+> 'Michelson-Morley' as 'Mickelson-Morley'. Ask for the correct spelling and
+> you still get the right passage first, because the hyphen splits into tokens
+> and 'Morley' still matches — but at half the lexical score. Proper nouns are
+> where ASR quality quietly becomes retrieval quality, and you only find that
+> out on real speech."

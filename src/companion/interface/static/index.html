@@ -51,6 +51,8 @@
   button:disabled { opacity: .5; cursor: default; }
   .hint { color: var(--dim); font-size: 13px; }
   .hint code { background: var(--panel); padding: 1px 5px; border-radius: 4px; cursor: pointer; }
+  .hint code:hover { filter: brightness(1.35); }
+  .hint .tag { font-size: 11px; opacity: .65; margin-left: 6px; }
   .banner { background: #2a2213; border: 1px solid var(--warn); color: #f0d79a;
             padding: 10px 14px; border-radius: 7px; margin: 16px 20px 0; font-size: 14px; }
   @media (max-width: 760px) { main { grid-template-columns: 1fr; } aside { display: none; } }
@@ -72,10 +74,14 @@
     <div id="log">
       <div class="hint" id="welcome">
         <p>Ask about the ingested episodes. Try:</p>
-        <p><code onclick="fill(this)">What is the main idea of the Planck episode?</code></p>
-        <p><code onclick="fill(this)">How do these episodes differ in what they mean by uncertainty?</code></p>
-        <p><code onclick="fill(this)">Take me to the part where they explain what a bit is.</code></p>
-        <p><code onclick="fill(this)">What do these episodes say about black holes?</code></p>
+        <p><code onclick="fill(this)">What bothered Einstein about the magnet and conductor example?</code></p>
+        <p><code onclick="fill(this)">How does Bell get to five-ninths?</code></p>
+        <p><code onclick="fill(this)">Why did Dirac need matrices in his equation?</code></p>
+        <p><code onclick="fill(this)">Compare how these episodes use E = mc squared.</code></p>
+        <p><code onclick="fill(this)">Take me to the part where they explain the light clock.</code>
+           <span class="tag">click a source afterwards to seek the audio</span></p>
+        <p><code onclick="fill(this)">What do these episodes say about black holes?</code>
+           <span class="tag">not covered — it should say so, not guess</span></p>
       </div>
     </div>
     <footer>
@@ -100,7 +106,7 @@ async function boot() {
   if (!health.chat_key_present) {
     const b = document.getElementById('banner');
     b.hidden = false;
-    b.textContent = 'No API key configured for chat — add ANTHROPIC_API_KEY to .env and restart. '
+    b.textContent = 'No API key configured for chat — set OPENROUTER_API_KEY and restart. '
       + 'Retrieval still works via POST /api/search.';
   }
   episodes = (await fetch('/api/episodes').then(r => r.json())).episodes;
@@ -128,6 +134,13 @@ function markActive() {
 function seek(episodeId, start) {
   const src = `/api/episodes/${encodeURIComponent(episodeId)}/audio`;
   player.style.display = 'block';
+  player.onerror = () => {
+    player.style.display = 'none';
+    const b = document.getElementById('banner');
+    b.hidden = false;
+    b.textContent = 'Audio is not available in this deployment, so playback is off. '
+      + 'Every citation still names the episode and timestamp you can check.';
+  };
   if (!player.src.endsWith(src)) {
     player.src = src;
     player.addEventListener('loadedmetadata', () => { player.currentTime = start; player.play(); }, { once: true });

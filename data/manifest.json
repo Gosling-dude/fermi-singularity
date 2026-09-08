@@ -1,0 +1,75 @@
+{
+  "version": 2,
+  "episodes": {
+    "great_papers_01_einstein_s_special_relativity": {
+      "sha256": "1ac0a6a2c5fb9a0b6cc3e05576dbed1220d4d763f4015cf75a676c24d27d1cab",
+      "asr_fingerprint": "local:medium:en",
+      "title": "Great Papers 01 Einstein's Special Relativity",
+      "source_file": "Great Papers 01 - Einstein's Special Relativity.mp3",
+      "duration": 3134.011438,
+      "num_segments": 594,
+      "num_chunks": 41
+    },
+    "great_papers_09_bell_s_theorem_1964": {
+      "sha256": "27419459a5dd947853b5a1a32605c6f6364a2338275db83057be365a0a35c751",
+      "asr_fingerprint": "local:medium:en",
+      "title": "Great Papers 09 Bell's Theorem, 1964",
+      "source_file": "Great Papers 09 - Bell's Theorem, 1964.mp3",
+      "duration": 2040.318313,
+      "num_segments": 399,
+      "num_chunks": 26
+    },
+    "great_papers_12_the_dirac_equation_and_antimatter_1928": {
+      "sha256": "2f780c9b74af87859a50538edc0106a5de6294b2042863c5100df51d30eedabd",
+      "asr_fingerprint": "local:medium:en",
+      "title": "Great Papers 12 The Dirac Equation and Antimatter, 1928",
+      "source_file": "Great Papers 12 - The Dirac Equation and Antimatter, 1928.mp3",
+      "duration": 1980.759125,
+      "num_segments": 357,
+      "num_chunks": 25
+    }
+  },
+  "stats": {
+    "episodes": [
+      {
+        "episode_id": "great_papers_01_einstein_s_special_relativity",
+        "title": "Great Papers 01 Einstein's Special Relativity",
+        "source_file": "Great Papers 01 - Einstein's Special Relativity.mp3",
+        "duration": 3134.011438,
+        "sha256": "1ac0a6a2c5fb9a0b6cc3e05576dbed1220d4d763f4015cf75a676c24d27d1cab",
+        "num_segments": 594,
+        "num_chunks": 41
+      },
+      {
+        "episode_id": "great_papers_09_bell_s_theorem_1964",
+        "title": "Great Papers 09 Bell's Theorem, 1964",
+        "source_file": "Great Papers 09 - Bell's Theorem, 1964.mp3",
+        "duration": 2040.318313,
+        "sha256": "27419459a5dd947853b5a1a32605c6f6364a2338275db83057be365a0a35c751",
+        "num_segments": 399,
+        "num_chunks": 26
+      },
+      {
+        "episode_id": "great_papers_12_the_dirac_equation_and_antimatter_1928",
+        "title": "Great Papers 12 The Dirac Equation and Antimatter, 1928",
+        "source_file": "Great Papers 12 - The Dirac Equation and Antimatter, 1928.mp3",
+        "duration": 1980.759125,
+        "sha256": "2f780c9b74af87859a50538edc0106a5de6294b2042863c5100df51d30eedabd",
+        "num_segments": 357,
+        "num_chunks": 25
+      }
+    ],
+    "transcribed": [],
+    "reused": [
+      "great_papers_01_einstein_s_special_relativity",
+      "great_papers_09_bell_s_theorem_1964",
+      "great_papers_12_the_dirac_equation_and_antimatter_1928"
+    ],
+    "total_audio_seconds": 7155.1,
+    "total_segments": 1350,
+    "total_chunks": 92,
+    "asr_seconds": 0.0,
+    "total_seconds": 25.1
+  },
+  "embed_model": "BAAI/bge-small-en-v1.5"
+}

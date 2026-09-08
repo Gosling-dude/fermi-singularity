@@ -1,0 +1,59 @@
+# Render Blueprint — Fermi Podcast Companion
+#
+# Deploys the pre-built index as an immutable Docker image. There is no build
+# step that runs ASR: `make ingest` is run once on a machine that has the
+# audio, and data/index + data/chunks + data/manifest.json are committed.
+#
+# No persistent disk is declared, deliberately. Verified: the service never
+# writes to data/ at runtime — the Chroma DB and BM25 index are read-only, and
+# conversation sessions are in-process by design. Nothing needs to survive a
+# restart, so a disk would cost money and buy nothing.
+
+services:
+  - type: web
+    name: fermi-podcast-companion
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    region: oregon
+    # 512 MB is NOT enough. Measured resident set is ~750 MB once the
+    # embedding model and the cross-encoder reranker are loaded, so `free`
+    # and `starter` will be OOM-killed. `standard` (2 GB) is the smallest
+    # instance that runs this reliably.
+    plan: standard
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      # The one secret. Set it in the Render dashboard; never commit it.
+      - key: OPENROUTER_API_KEY
+        sync: false
+
+      # Providers and models (all already the code defaults; pinned here so
+      # the deployment is explicit rather than implicit).
+      - key: CHAT_PROVIDER
+        value: openrouter
+      - key: CHAT_MODEL
+        value: anthropic/claude-sonnet-5
+      - key: JUDGE_PROVIDER
+        value: openrouter
+      - key: JUDGE_MODEL
+        value: openai/gpt-5-mini
+
+      # Absolute paths matching the image layout.
+      - key: DATA_DIR
+        value: /app/data
+      - key: AUDIO_DIR
+        value: /app/audio
+      - key: VECTOR_DB_PATH
+        value: /app/data/index
+
+      # Models are baked into the image; never call the Hub at runtime.
+      - key: HF_HOME
+        value: /opt/hf
+      - key: HF_HUB_OFFLINE
+        value: "1"
+      - key: TRANSFORMERS_OFFLINE
+        value: "1"
+
+      - key: LOG_LEVEL
+        value: INFO

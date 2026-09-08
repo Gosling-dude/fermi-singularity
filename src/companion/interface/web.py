@@ -78,6 +78,17 @@ async def companion_error_handler(_: Request, exc: CompanionError) -> JSONRespon
     )
 
 
+@app.get("/health")
+def liveness() -> dict[str, str]:
+    """Liveness probe for the platform's health check.
+
+    Deliberately does no work: it touches no file, loads no model and reads
+    no settings, so a slow first model load can never make the platform think
+    the service is down. Use /api/health for the substantive readiness view.
+    """
+    return {"status": "ok"}
+
+
 @app.get("/api/health")
 def health() -> dict[str, Any]:
     settings = get_settings()
@@ -186,6 +197,8 @@ def index() -> HTMLResponse:
 
 
 def main() -> int:
+    import os
+
     import uvicorn
 
     configure_logging()
@@ -194,8 +207,12 @@ def main() -> int:
     if not episodes:
         print("Nothing ingested yet — run `make ingest` first.")
         return 1
-    print("Fermi Podcast Companion → http://127.0.0.1:8000")
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+    # Local default stays loopback; a container sets HOST=0.0.0.0 so the
+    # platform can reach it, and PORT is assigned by the platform.
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "8000"))
+    print(f"Fermi Podcast Companion → http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port, log_level="warning")
     return 0
 
 

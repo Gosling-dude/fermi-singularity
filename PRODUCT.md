@@ -14,7 +14,7 @@ do with it: come back to an idea and check it.
 Concretely, after listening to three hour-long episodes, a learner cannot:
 
 - **find** the moment where something was explained ("they said something about
-  why energy comes in packets — where?");
+  muons proving time dilation — where?");
 - **compare** what two episodes said about the same idea;
 - **verify** a half-remembered claim without scrubbing through an hour of audio;
 - **tell** whether the collection covers a topic at all.
@@ -36,9 +36,10 @@ A learner can:
 
 - ask questions in natural language and get a direct, clear answer;
 - follow up conversationally ("explain that second point more simply");
-- ask across episodes ("how do these two differ on what uncertainty means?");
+- ask across episodes ("compare how each of these episodes portrays Einstein");
 - ask what to listen to and why;
-- say "take me to the part where they explain X" and get a timestamp;
+- say "take me to the part where they explain the light clock" and get a
+  timestamp;
 - click any source and hear the audio at that exact second;
 - and — critically — be told plainly when the episodes simply do not cover
   something.

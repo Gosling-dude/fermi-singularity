@@ -4,10 +4,25 @@ Everything in this document was produced by running the system. The raw
 inputs and outputs are committed under `eval/results/` — no number here was
 typed by hand.
 
+**Corpus.** Every number below was measured on the three supplied Fermi
+"Great Papers" episodes — Einstein's Special Relativity (52:14), Bell's
+Theorem (34:00) and The Dirac Equation and Antimatter (33:00); 1 h 59 m of
+audio, 1,350 ASR segments, 92 passages — transcribed by this system from the
+raw MP3s with faster-whisper `medium` in 41 minutes on CPU.
+
+> **Historical runs.** `eval/results/synthetic_*` holds an earlier generation
+> of results measured against three short locally-synthesised fixture episodes,
+> used to build and debug the pipeline before the real audio was available.
+> They describe a **different corpus** and are kept only as a record of the
+> development process (including one change that made things worse and was
+> reverted). Nothing in this document quotes them except where explicitly
+> labelled. See `eval/results/README.md`.
+
 ```bash
-make eval-baseline    # reproduces eval/results/run_baseline/
-make eval-improved    # reproduces eval/results/run_improved/
+make eval-baseline    # reproduces eval/results/fermi_baseline/
+make eval-improved    # reproduces eval/results/fermi_improved/
 make eval-compare     # prints the table in §7
+make eval             # reproduces eval/results/fermi_full/  (needs a key)
 ```
 
 ---
@@ -109,27 +124,20 @@ RETRIEVAL_MODE=dense ENABLE_RERANK=false python -m eval.runner --retrieval-only
 Corpus, chunking, embeddings and cases are identical between the two runs. The
 only difference is the retrieval and gating strategy.
 
-> **On the audio used.** The runs below were executed against three synthetic
-> development episodes (`scripts/fixtures/`, ~20 minutes total) generated
-> locally, because the supplied Fermi episodes were not available on this
-> machine. The audio is real audio and the ASR, retrieval and evaluation are
-> all real — but the *absolute* numbers describe this fixture corpus, not the
-> Fermi collection. Re-running `make ingest && make eval-baseline &&
-> make eval-improved` on the real episodes regenerates everything, including
-> the calibrated gate, which is computed per corpus. The methodology and the
-> direction of the finding transfer; the specific percentages should be
-> re-measured.
+Corpus, chunking, embeddings and cases are identical between the two runs, and
+both were run against the real Fermi episodes. The calibrated gate is computed
+per corpus at ingestion time; for this collection it came out at **−5.421**.
 
 ---
 
 ## 4. Baseline results
 
-`eval/results/run_baseline/summary.json`
+`eval/results/fermi_baseline/summary.json`
 
 ```
-Pass rate                 15/20   (75%)
-Retrieval: episode hit           100%
-Retrieval: term coverage          91%
+Pass rate                 14/20   (70%)
+Retrieval: episode hit          93.8%
+Retrieval: term coverage        84.4%
 Refusal accuracy            0/4   (0%)
 False refusals                     0
 Mean latency                   0.01s
@@ -140,22 +148,23 @@ Per category:
 | Category | Baseline |
 |---|---|
 | factual | 4/4 |
-| cross_episode | 3/3 |
+| cross_episode | 1/3 |
 | explanation | 2/2 |
 | locate | 2/2 |
 | recommendation | 1/1 |
 | ambiguous | 1/1 |
-| followup | 2/3 |
+| followup | 3/3 |
 | **refusal** | **0/4** |
 
-Retrieval is strong. Refusal is completely broken — the gate fired for none of
-the four out-of-scope questions.
+Single-episode retrieval is strong. Two things are broken: refusal fired for
+none of the four out-of-scope questions, and cross-episode retrieval dropped
+2 of 3 because dense-only ranking let one episode monopolise the context.
 
 ---
 
 ## 5. Three real failures, inspected
 
-These are copied from `eval/results/run_baseline/raw.jsonl`.
+These are copied from `eval/results/fermi_baseline/raw.jsonl`.
 
 ### Failure 1 — `refusal_02`: a topic the episodes never mention
 
@@ -163,16 +172,16 @@ These are copied from `eval/results/run_baseline/raw.jsonl`.
 
 **Retrieved context (top 2 of 5):**
 ```
-The Birth Of The Quantum  5:17–6:38  (cosine 0.6384)
-  "…be built out of indivisible units. Energy comes in packets. That idea
-   turns out to be the single most productive idea of 20th century physics…"
+Great Papers 12 The Dirac Equation…  0:00–1:49   (cosine 0.6858)
+  "Imagine you set out to do something modest and technical. You want to fix
+   a known flaw in an equation, not overthrow physics…"
 
-The Birth Of The Quantum  6:25–6:58  (cosine 0.6326)
-  "…called Planck units today, we will come back to that, because when we do
-   the Bell's theorem episode…"
+Great Papers 09 Bell's Theorem, 1964  9:45–11:29  (cosine 0.6526)
+  "…the light flashes a colour. You do this over and over, millions of times,
+   with the switches set however you like…"
 ```
 
-**What happened:** max cosine similarity 0.638, far above the 0.30 gate, so the
+**What happened:** max cosine similarity 0.686, far above the 0.30 gate, so the
 system treated the question as answerable and passed these passages to the
 model.
 
@@ -187,72 +196,74 @@ aboutness, not answerability. It is the wrong quantity for a refusal decision.
 
 ### Failure 2 — `refusal_04`: the adjacent-topic trap
 
-**Question:** "What did Planck say about the double-slit experiment in this
-episode?"
+**Question:** "What does the Dirac episode say about the Higgs boson giving
+particles their mass?"
 
 **Retrieved context (top 1):**
 ```
-The Birth Of The Quantum  6:25–6:58  (cosine 0.6927)
-  "…called Planck units today, we will come back to that, because when we do
-   the Bell's theorem episode…"
+Great Papers 12 The Dirac Equation…  20:37–22:01  (cosine 0.6905)
+  "…rare radioactive process that would only be possible if the neutrino is
+   its own antiparticle, and the answer would bear directly on that matter
+   versus antimatter mystery…"
 ```
 
-**What happened:** cosine 0.693 — the *highest* score of any refusal case, and
-higher than legitimately answerable questions such as `factual_02` (0.684).
+**What happened:** cosine 0.691 — the *highest* score of any refusal case, and
+higher than legitimately answerable questions such as `followup_03` (0.596)
+and `cross_01` (0.652).
 
-**Why it failed:** the question names a real entity from the episode (Planck)
-and a real concept from physics (the double slit) that the episode never
-discusses. Every lexical and semantic signal says "this is about the Planck
-episode." Only reading the passages reveals the double slit is absent.
+**Why it failed:** the question names a real episode from the collection and a
+real concept from physics (the Higgs) that the episode never discusses. Every
+lexical and semantic signal says "this is about the Dirac episode." Only
+reading the passages reveals the Higgs is absent.
 
 **Root cause:** the same as Failure 1 but sharper — this case proves no single
 threshold on bi-encoder cosine can work, because the score distributions of
 in-scope and out-of-scope questions genuinely *overlap*:
 
 ```
-in-scope  cosine range:  0.595 – 0.809
-out-of-scope    range:  0.396 – 0.693      ← overlapping
+in-scope     cosine range:  0.596 – 0.778
+out-of-scope cosine range:  0.439 – 0.691      ← overlapping
 ```
 
-### Failure 3 — `followup_02`: a follow-up with no topical anchor
+Any threshold that catches the Higgs question at 0.691 would also refuse
+`followup_03` (0.596), `cross_01` (0.652) and several other legitimate
+questions.
 
-**Conversation:**
-```
-turn 1: "Tell me about Shannon's noisy channel theorem."
-turn 2: "Why couldn't engineers actually use it at the time?"   ← scored
-```
+### Failure 3 — `cross_02`: one episode monopolises a comparison
 
-**Query actually sent to the retriever:** `Why couldn't engineers actually use
-it at the time?`
+**Question:** "Compare how these episodes use E = mc squared."
 
 **Retrieved context:**
 ```
-Shannon And The Birth Of Information  0:00–1:30  (cosine 0.6203)
-  "Welcome back to Great Papers. Last time we looked at Max Planck…"
-The Birth Of The Quantum  5:17–6:38   (cosine 0.6031)
+Great Papers 01 Einstein's Special Relativity  22:36–23:55  (cosine 0.6517)
+  "…to cross in its normal lifetime. So one observer says your clock slowed,
+   the other says your distance shrank…"
+Great Papers 09 Bell's Theorem, 1964           9:45–11:29   (cosine 0.6485)
 ```
 
-**What happened:** term coverage 0% — neither "non constructive" nor "codes"
-appeared in the retrieved passages. The right answer (the proof is
-non-constructive; practical codes took decades) sits in a passage that was
-never retrieved.
+**What happened:** episode hit 50% — the Dirac episode, which is half the
+question, never appeared. Term coverage 0%: neither "mc squared" nor
+"annihilate" was in the retrieved text, even though both episodes discuss
+E = mc² explicitly.
 
-**Why it failed:** stripped of its conversational context, the second turn
-contains no content words at all. The retriever matched generic
-episode-introduction language, which is the nearest thing to a contentless
-question.
+**Why it failed:** dense-only ranking took the five globally best-scoring
+passages. Relativity passages dominate anything phrased in Einstein's
+vocabulary, and the Bell episode contributed a passage that is not about mass
+at all. Nothing in the strategy guarantees that a comparison question sees both
+sides.
 
-**Root cause:** a distinct problem from the first two — this is query
-*formulation*, not relevance *judgement*. The system has a query-rewriting step
-for exactly this, but it calls the LLM, and this run had no API key. See §8.
+**Root cause:** a different problem from the first two — this is candidate
+*selection*, not relevance *judgement*. A comparison needs per-episode
+representation, which a single global ranking cannot promise.
 
 ---
 
 ## 6. The improvement
 
-Failures 1 and 2 are the same root cause and account for **4 of the 5 baseline
+Failures 1 and 2 are the same root cause and account for **4 of the 6 baseline
 failures**, in the category the product's core promise depends on. That is the
-one thing worth fixing.
+one thing worth fixing. (Failure 3 is fixed separately and more cheaply, by
+balancing retrieval across episodes in `compare` mode.)
 
 **Hypothesis.** A cross-encoder reads the query and the passage *together* and
 is trained to judge whether the passage answers the query, rather than whether
@@ -266,36 +277,45 @@ relevance gate:
    `cross-encoder/ms-marco-MiniLM-L-6-v2` (22M parameters, CPU, no API key,
    ~35 ms for 8 passages). This also improves final ordering.
 2. Normalise the query before scoring. "Take me to the part where they explain
-   what a bit is" is a request wrapped around a topic; scored verbatim the
-   cross-encoder grades the wrapper and returns −1.51, but scored as "what a
-   bit is" it returns +3.87.
+   the light clock" is a request wrapped around a topic; scored verbatim the
+   cross-encoder grades the wrapper and returns **−1.18**, but scored as "the
+   light clock" it returns **+3.72**. Likewise "where in the audio do they talk
+   about closing the experimental loopholes" goes from **+0.06** to **+4.36**.
 3. Gate on the reranker score instead of cosine.
 
 ### 6.1 The threshold — and how I avoided fitting it to the test set
 
-My first attempt used the cross-encoder's natural decision boundary (logit
-sign, i.e. 0.0). **It made things worse**: refusal accuracy went 0% → 100% but
-it introduced **6 false refusals** and the overall pass rate *fell* from 75% to
-70%. That run is kept as evidence in `eval/results/run_rerank_only/`.
+The obvious threshold is the cross-encoder's natural decision boundary (logit
+sign, i.e. 0.0). During development on the fixture corpus I tried exactly that
+and **it made things worse**: refusal accuracy went 0% → 100% but it introduced
+**6 false refusals** and the overall pass rate *fell*. That experiment is kept
+as evidence in `eval/results/synthetic_rerank_only/` — it is a fixture-corpus
+run, and it is quoted here for the lesson, not for its numbers.
 
-The false refusals were informative. Collection-level questions
-(`cross_03`, −7.14), a numeric-value question (`factual_04`, −0.54) and
-un-rewritten follow-ups all score low on a *passage*-relevance model, because
-no single passage "answers" them in the sense the model was trained on. And
-`factual_04` (in-scope, −0.54) versus `refusal_04` (out-of-scope, −0.58) are
-0.04 apart — so a threshold tuned to separate them would be fitted to noise.
+The lesson generalises, and the real corpus shows why. Collection-level
+questions, numeric-value questions and un-rewritten follow-ups all score low on
+a *passage*-relevance model, because no single passage "answers" them in the
+sense the model was trained on. On the Fermi corpus the cross-encoder scores
+still overlap:
 
-So the threshold is not tuned on the evaluation cases at all. It is
-**calibrated from the corpus at ingestion time** (`retrieve/calibrate.py`):
-eight fixed, mundane, domain-free probe questions that no podcast collection
-could answer ("how do I renew my passport online", "what are the rules of
-cricket") are scored against the indexed passages. Their scores describe what
-"definitely not covered" looks like *for this corpus*, and the gate sits one
-point above that band.
+```
+in-scope     rerank range:  −6.92 – +5.45   (min: followup_03, un-rewritten)
+out-of-scope rerank range: −11.02 – +0.95   (max: refusal_04, the Higgs trap)
+```
 
-On this corpus the probes cluster tightly at −11.0 to −11.3, giving a gate of
-**−9.98**, written into `data/index/index_meta.json`. It is recomputed on every
-`make ingest`, so it adapts to whatever audio is supplied.
+A threshold placed at 0.0 would refuse eight legitimate questions to catch one
+more out-of-scope one. So the threshold is not tuned on the evaluation cases at
+all. It is **calibrated from the corpus at ingestion time**
+(`retrieve/calibrate.py`): eight fixed, mundane, domain-free probe questions
+that no podcast collection could answer ("how do I renew my passport online",
+"what are the rules of cricket") are scored against the indexed passages. Their
+scores describe what "definitely not covered" looks like *for this corpus*, and
+the gate sits one point above that band.
+
+On the Fermi corpus the probe band tops out at **−6.421**, giving a gate of
+**−5.421**, written into `data/index/index_meta.json`. It is recomputed on
+every `make ingest`, so it adapts to whatever audio is supplied — on the
+fixture corpus the same code produced −9.98.
 
 This makes the gate deliberately **high-precision and low-recall**: it refuses
 the clearly unrelated and never refuses something the episodes might support.
@@ -310,52 +330,70 @@ cheap pre-filter, the prompt is the semantic judge.
 `make eval-compare`
 
 ```
-               run_baseline  →  run_improved
+             fermi_baseline  →  fermi_improved
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━┓
 ┃ Metric                   ┃ Baseline ┃ Improved ┃  Delta ┃
 ┡━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━┩
-│ Pass rate                │    75.0% │    85.0% │ +10.0% │
-│ Retrieval: episode hit   │   100.0% │   100.0% │      0 │
-│ Retrieval: term coverage │    90.6% │    90.6% │      0 │
-│ Refusal accuracy         │     0.0% │    50.0% │ +50.0% │
-│ False refusals           │        0 │        0 │      0 │
-│ Mean latency             │    0.01s │    0.57s │ +0.56s │
+│ Pass rate                │    70.0% │    90.0% │ +20.0% │
+│ Retrieval: episode hit   │    93.8% │   100.0% │  +6.2% │
+│ Retrieval: term coverage │    84.4% │    84.4% │      0 │
+│ Refusal accuracy         │     0.0% │    75.0% │ +75.0% │
+│ False refusals           │        0 │        1 │     +1 │
+│ Mean latency             │    0.01s │    0.52s │ +0.51s │
 │ Estimated cost           │  $0.0000 │  $0.0000 │      0 │
 └──────────────────────────┴──────────┴──────────┴────────┘
 
-Fixed (2): refusal_01, refusal_02
-Regressed: none
+Fixed (5): cross_02, cross_03, refusal_01, refusal_02, refusal_03
+Regressed (1): followup_03
 ```
 
 | Category | Baseline | Improved |
 |---|---|---|
 | factual | 4/4 | 4/4 |
-| cross_episode | 3/3 | 3/3 |
+| cross_episode | 1/3 | **3/3** |
 | explanation | 2/2 | 2/2 |
 | locate | 2/2 | 2/2 |
 | recommendation | 1/1 | 1/1 |
 | ambiguous | 1/1 | 1/1 |
-| followup | 2/3 | 2/3 |
-| **refusal** | **0/4** | **2/4** |
+| followup | 3/3 | 2/3 |
+| **refusal** | **0/4** | **3/4** |
 
 ### What improved
-Two of four out-of-scope questions are now refused deterministically, before
+Three of four out-of-scope questions are now refused deterministically, before
 any model call — so those refusals are free, fast, and cannot be talked out of
-by a persuasive prompt.
+by a persuasive prompt. Cross-episode retrieval went 1/3 → 3/3: episode-balanced
+selection in `compare` mode guarantees both sides of a comparison are present,
+which lifted mean episode hit from 93.8% to 100%.
 
 ### What did not
-`refusal_03` (Hawking radiation, −8.48) and `refusal_04` (double slit, −0.58)
-still clear the gate. This is by design, not an oversight: pulling the gate up
-to catch them would cross the in-scope band and start refusing real questions.
-They are delegated to the grounding prompt, which offline mode cannot exercise.
+`refusal_04` (the Higgs trap, rerank **+0.95**) still clears the gate. This is
+by design, not an oversight: it is the highest-scoring out-of-scope question in
+the set, and pulling the gate up to catch it would cross deep into the in-scope
+band and start refusing real questions. It is delegated to the grounding
+prompt — which offline mode cannot exercise, but which handles it correctly in
+the full run (§9, `refusal_04` passes 5/5 on every judge dimension).
 
 ### What regressed
-Nothing at case level. Mean latency rose 0.01 s → 0.57 s. Almost all of that is
-the one-off cross-encoder load on the first query; steady-state reranking is
-~35 ms for 8 passages, which is negligible next to an LLM call.
+**`followup_03` regressed, and I have left it in the table rather than hiding
+it.** The case is a two-turn conversation whose scored turn is "How long did it
+take before someone actually found it?" — a question with no topical content of
+its own. Offline mode makes no LLM call by design, so no query rewriting
+happens, the bare turn scores −6.92, and the gate refuses it. This is a false
+refusal and it counts against the improved run.
+
+It is an artefact of the *offline measurement mode*, not of the shipped system:
+in the full run, rewriting turns it into "How long after Dirac's equation
+predicted the positron did experimental confirmation arrive?" and the case
+passes 5/5. The honest statement is that the improved gate is strictly better
+at refusing, and slightly more brittle for context-dependent follow-ups when it
+has no rewriter — which is exactly the trade-off a cheap pre-filter makes.
+
+Mean latency rose 0.01 s → 0.52 s. Almost all of that is the one-off
+cross-encoder load on the first query; steady-state reranking is ~35 ms for 8
+passages, which is negligible next to an LLM call.
 
 ### Honest reading of the headline number
-The 85% figure covers only the retrieval and gating layer — it is not a claim
+The 90% figure covers only the retrieval and gating layer — it is not a claim
 about answer quality. The full pipeline, measured separately in §9, scores
 19/20 with refusal accuracy 4/4 and citation validity 100%.
 
@@ -363,33 +401,44 @@ about answer quality. The full pipeline, measured separately in §9, scores
 
 ## 8. Remaining weaknesses
 
-1. ~~Two adjacent-topic refusals rely entirely on the prompt.~~ **Resolved and
+1. ~~Adjacent-topic refusals rely entirely on the prompt.~~ **Resolved and
    measured** — the full run in §9 scores refusal accuracy 4/4, confirming the
-   prompt catches what the gate delegates.
+   prompt catches what the gate delegates (`refusal_04`, 5/5 on every judge
+   dimension).
 2. ~~Follow-up retrieval degrades without query rewriting.~~ **Resolved with a
-   key** — `followup_02` passes in the full run. It still fails offline, so a
+   key** — `followup_03` passes in the full run. It still fails offline, so a
    free fallback (concatenating the previous question with the follow-up)
    remains worthwhile for keyless operation.
-3. **Unsupported narrative completion.** `followup_01` in §9.2 — the model
-   inferred a fact the transcript implies but never states. No deterministic
-   check catches this class, and the strict grounding prompt did not prevent
-   it. This is the biggest open risk in the system.
-4. **The corpus is small** (19 chunks, ~20 min). Retrieval metrics are
+3. **Unsupported narrative completion.** `cross_01` in §9.2 — the model added a
+   word ("instantaneously") and a characterisation the passages do not contain.
+   No deterministic check catches this class, and the strict grounding prompt
+   did not prevent it. This is the biggest open risk in the system.
+4. **ASR error becomes retrieval error on proper nouns.** Whisper `medium`
+   transcribes "Michelson-Morley" as **"Mickelson-Morley"** throughout the
+   relativity episode. Querying the correct spelling still returns the right
+   passage first — the hyphen tokenises and "Morley" still matches, at BM25
+   4.20 against 8.40 for the ASR's own spelling — but the margin is halved, and
+   a name with no second token would be lost entirely. This class of failure
+   is invisible on synthetic audio and only appears on real speech.
+5. **The corpus is small** (92 chunks, 1 h 59 m). Retrieval metrics are
    optimistic at this scale; `episode_hit` of 100% is much easier with three
    episodes than thirty.
-5. **The judge is unvalidated.** I have not measured judge–human agreement, so
-   its scores should be read as a signal, not a verdict — though on the two
-   cases in §9.1 and the one in §9.2 its rationales were specific and correct
-   on inspection.
-6. **Absolute numbers are corpus-specific.** See the note in §3.
-7. **`term_coverage` is a proxy.** It rewards lexical overlap with the terms I
+6. **The judge is unvalidated.** I have not measured judge–human agreement, so
+   its scores should be read as a signal, not a verdict — though on the cases
+   in §9.1 and §9.2 its rationales were specific and correct on inspection.
+7. **Full-pipeline numbers are one sample.** Generation is non-deterministic.
+   Across the two full runs recorded here the pass rate was 19/20 both times,
+   but the *failing case* differed (`explain_02` before the prompt fix in §9.1,
+   `cross_01` after). The offline numbers are deterministic; the full numbers
+   are not, and a single run should not be over-read.
+8. **`term_coverage` is a proxy.** It rewards lexical overlap with the terms I
    chose, which under-credits a passage that conveys the idea in other words.
 
 ---
 
 ## 9. Full pipeline results (generation + LLM judge)
 
-`eval/results/run_full_openrouter/` — run through OpenRouter with
+`eval/results/fermi_full/` — run through OpenRouter with
 `anthropic/claude-sonnet-5` for chat and `openai/gpt-5-mini` as judge. The judge
 is a **different vendor from the chat model on purpose**: a judge grading its
 own family's output is prone to self-preference bias, and OpenRouter makes
@@ -399,75 +448,109 @@ cross-vendor judging a one-line change on a single key.
 Pass rate                19/20   (95%)
 Refusal accuracy           4/4  (100%)
 False refusals                      0
-Citation validity                100%   (0 invalid of 68)
+Citation validity                100%   (0 invalid of 62)
+Forbidden-claim leaks               0
 Retrieval: episode hit           100%
-Retrieval: term coverage          94%
-Judge: faithfulness              4.85
-Judge: completeness              5.00
+Retrieval: term coverage          91%
+Judge: faithfulness              4.90
+Judge: completeness              4.80
 Judge: citation correctness      5.00
 Judge: refusal correctness       5.00
 Judge: clarity                   5.00
-Mean latency                    8.56s
-Actual cost                   $0.2735   (reported by OpenRouter, not estimated)
+Mean latency                   11.25s
+Actual cost                   $0.2995   (reported by OpenRouter, not estimated)
 ```
+
+Per category: factual 4/4 · cross_episode 2/3 · explanation 2/2 ·
+recommendation 1/1 · locate 2/2 · **refusal 4/4** · ambiguous 1/1 ·
+followup 3/3.
 
 Three things are worth drawing out.
 
 **The two-layer refusal design is validated.** Offline, the calibrated gate
-catches 2 of 4 refusals and deliberately delegates the two topically adjacent
-ones. With generation enabled, refusal accuracy is **4/4** — the grounding
-prompt caught exactly the cases the gate passed to it. That is the design
-working as intended, and it is the answer to the open risk flagged in §8.
+catches 3 of 4 refusals and deliberately delegates the topically adjacent one.
+With generation enabled, refusal accuracy is **4/4** — the grounding prompt
+caught exactly the case the gate passed to it. On the Higgs trap the model
+answered by *naming what the episode does cover* (negative-energy solutions,
+the Dirac Sea, the positron, PET scans) and stating the Higgs is not among it.
+That is the design working as intended.
 
-**Citation validity is 100% across 68 citations.** No fabricated episode, no
-invented timestamp, nothing stripped by the validator.
+**Citation validity is 100% across 62 citations.** No fabricated episode, no
+invented timestamp, nothing stripped by the validator. Re-verified
+independently against the ASR segment table — every cited interval overlaps
+real transcribed speech in the episode it names, and lies inside that episode's
+duration. The 62 citations span all three episodes (23 / 13 / 21).
 
-**Query rewriting fixes Failure 3.** `followup_02` — the un-anchored follow-up
-that failed offline — passes here. "Why couldn't engineers actually use it at
-the time?" was rewritten to "Why couldn't engineers actually use Shannon's
-noisy channel theorem at the time?" and retrieval found the right passage.
+**Query rewriting fixes the offline regression.** `followup_03` — the
+un-anchored follow-up that fails offline — passes here. "How long did it take
+before someone actually found it?" was rewritten to "How long after Dirac's
+equation predicted the positron did experimental confirmation arrive?" and
+retrieval found the right passage.
 
 ### 9.1 Two defects the evaluation found — in the evaluation and in the product
 
-The first full run scored 18/20. Both failures turned out to be defects in *my
-own work*, not in the system's reasoning, and both are worth recording because
-finding them is the entire point of building an evaluation. That run is kept at
-`eval/results/run_full_pre_fixes/`.
+Two defects were found by running this evaluation and are worth recording,
+because finding them is the entire point of building one.
 
-**`refusal_03` — a false positive in my deterministic check.** The system
-produced a near-perfect refusal ("None of them mention Hawking radiation, black
-holes, or black hole evaporation, so I can't answer this from the material
-provided") and the judge scored it 5/5/5/5/5. My forbidden-claim check failed it
-for containing the word "Hawking" — a term the *learner* had put in the
-question. A refusal has to be able to name what it is declining. Fixed: a
-forbidden claim that already appears in the case's own input is not evidence of
-ungrounded generation. Terms absent from the question ("event horizon",
-"virtual particle") are still caught.
+**A false refusal caused by an ambiguous prompt rule.** The first full run on
+the real corpus scored 19/20 with `explain_02` failing — "What was the Dirac
+Sea and why don't physicists use it any more?" was flagged `NOT_COVERED`
+*despite the model having answered the first half correctly and completely*.
+The judge scored it 5/5/5/5/5; only the deterministic check caught it, flagging
+an in-scope question refused. The cause was a genuine conflict in the system
+prompt: rule 3 said to emit the marker "if the passages do not support an
+answer", while rule 4 said to answer partially-supported questions and name the
+gap. For a two-part question where retrieval surfaced the "what" but not the
+"why", both rules applied. Fixed by scoping rule 3 to "support **no part** of
+the question" and stating explicitly that rule 4's case must not emit the
+marker. That run is kept at `eval/results/fermi_full_pre_prompt_fix/`; after the
+fix `explain_02` passes 5/5 and false refusals went 1 → 0.
 
-**`refusal_01` — an unverifiable claim in my refusal message.** The judge docked
-faithfulness to 3 with a precise rationale: the canned message said *"I searched
-the transcripts of every episode in this collection"*, which the retrieved
-passages cannot support. The judge was right — the statement is true of the
-system but is not grounded in the evidence shown. Fixed in the product, not in
-the judge: the message now asserts only the outcome. Keeping the judge strict
-was the better trade.
+Note what this was *not*: the retrieval gate behaved correctly throughout
+(rerank −0.55, well above the −5.421 gate). The passage answering "why it was
+replaced" — Feynman's reading of antiparticles as particles moving backward in
+time — sits in chunk `…_0012`, which ranked below the chunks that were
+returned. A retrieval miss and a prompt ambiguity combined to discard an answer
+the system was capable of giving.
+
+**Two earlier defects, found on the fixture corpus, still fixed in this code.**
+A forbidden-claim check that failed a *correct* refusal for containing a word
+the learner had put in the question ("Hawking"), and a canned refusal message
+that asserted *"I searched the transcripts of every episode"* — true of the
+system, but not supported by the retrieved passages, and correctly docked by
+the judge. Both fixes are in the shipped code; the evidence run is
+`eval/results/synthetic_full_pre_fixes/`.
 
 ### 9.2 The one real remaining failure
 
-`followup_01` fails on faithfulness (3/5), and this one is genuine.
+`cross_01` fails on faithfulness (3/5), and this one is genuine.
 
-Asked to explain Planck's "act of desperation" more simply, the answer states
-that Planck **never succeeded** in finding a derivation without the quantum
-assumption. The transcript says he "spent years trying to do exactly that
-himself" — it never says he failed. The claim is historically true, which is
-precisely why it is dangerous: the model completed the narrative arc that
-"spent years trying" implies, and produced an unsupported fact that reads
-perfectly naturally.
+Asked how the relativity and Bell episodes each treat the idea that nothing
+outruns light, the answer says that reproducing quantum mechanics forces any
+hidden-variable theory to include influence that reaches across distance
+**"instantaneously"**, and calls the two positions **"seemingly conflicting"**.
+The retrieved Bell passages say the pilot-wave picture is "openly explicitly
+non-local with a guiding wave that reaches across any distance" — they do not
+say *instantaneously*, and they do not characterise the relationship to
+relativity at all.
+
+Both additions are true, and both are the kind of thing a knowledgeable reader
+would supply automatically — which is precisely why they are dangerous. The
+model completed the argument rather than reporting it. Every deterministic
+check passed: no forbidden claim appeared, all four citations were valid, and
+the right episodes were retrieved. Only the judge caught it.
+
+There is a compounding retrieval cause. The Bell episode *does* address this
+directly — "So no information outraces light… Relativity's speed limit is
+completely safe" — and had that passage been retrieved, the answer would have
+been both grounded and better. Compare mode balanced across episodes but
+selected the entanglement setup and the interpretations passage instead. The
+model, lacking the passage that resolves the tension, inferred the tension.
 
 This is the exact failure mode the product exists to prevent, it survived a
-strict grounding prompt, and it was caught only by the judge — not by any
-deterministic check. It is the strongest argument in this document for having
-an LLM judge at all, and the most useful open problem in the system.
+strict grounding prompt, and it was caught only by the judge. It is the
+strongest argument in this document for having an LLM judge at all, and the
+most useful open problem in the system.
 
 ## 10. Next improvements, in priority order
 
@@ -475,13 +558,21 @@ an LLM judge at all, and the most useful open problem in the system.
    failure. A verification pass that re-reads each claim against the cited
    passage, or a prompt rule specifically forbidding inferences the transcript
    only implies, is the obvious next experiment.
-2. **Free follow-up query expansion** — prepend the previous turn's question to
+2. **Improve within-episode passage selection for multi-part questions.** Both
+   §9.1 and §9.2 have the same secondary cause: the passage that answers the
+   *second* half of a question ranked below passages answering the first. A
+   query-decomposition step, or reserving a context slot for the lowest-scoring
+   sub-question, would address both.
+3. **Free follow-up query expansion** — prepend the previous turn's question to
    a context-dependent follow-up when no LLM is available, so keyless operation
-   matches the full pipeline on `followup_02`.
-3. **Broaden the judge across vendors** — run the same cases through two judges
+   matches the full pipeline on `followup_03`.
+4. **Repeat the full run to quantify variance** (§8.7) — two runs is not enough
+   to report a confidence interval on a non-deterministic pass rate.
+5. **Broaden the judge across vendors** — run the same cases through two judges
    from different families and report disagreement, which would also give the
-   judge-validation §8.5 asks for. OpenRouter makes this a config change.
-4. **Sentence-level citation anchoring** — cite the specific sentence rather
+   judge validation §8.6 asks for. OpenRouter makes this a config change.
+6. **Fuzzy lexical matching for ASR-mangled proper nouns** (§8.4) — a character
+   n-gram fallback in BM25 would recover "Michelson" → "Mickelson" without
+   touching dense retrieval.
+7. **Sentence-level citation anchoring** — cite the specific sentence rather
    than the whole 75-second chunk, narrowing what a learner must listen to.
-5. **Measure judge agreement** against my own labels on the 20 cases, so the
-   judge's scores can be trusted quantitatively.

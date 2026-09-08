@@ -1,0 +1,49 @@
+# ---------------------------------------------------------------------------
+# Build context for the serving image.
+#
+# The server needs: src/, data/index, data/chunks, data/manifest.json, and
+# (optionally) audio/ for in-browser playback. Everything else is either an
+# ingestion by-product, a dev tool, or a secret.
+# ---------------------------------------------------------------------------
+
+# Secrets — never let these into an image layer.
+.env
+.env.*
+!.env.example
+
+# VCS and local tooling
+.git
+.gitignore
+.gitattributes
+.github
+.venv
+venv
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# Ingestion by-products. Large, and the server never reads them:
+# normalized/ is intermediate WAV (~234 MB), transcripts/ are only an
+# ingest-time input to chunking.
+data/normalized
+data/transcripts
+
+# Evaluation evidence — not needed to serve, and the raw runs are bulky.
+eval/results
+
+# Dev-only material
+tests
+docs
+scripts
+*.md
+!audio/README.md
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea
+.vscode
+*.swp

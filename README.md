@@ -5,8 +5,10 @@ podcasts, built **from raw audio**. Ask a question, get a clear answer, and
 click a timestamp to hear the exact moment that supports it — or be told
 plainly that the episodes don't cover it.
 
-Product reasoning: [`PRODUCT.md`](PRODUCT.md) · Evaluation, failures and the
-measured improvement: [`EVAL.md`](EVAL.md)
+Product reasoning: [`PRODUCT.md`](PRODUCT.md) ·
+Evaluation, failures and the measured improvement: [`EVAL.md`](EVAL.md) ·
+Dependencies and cost: [`SERVICES_REQUIRED.md`](SERVICES_REQUIRED.md) ·
+3-minute demo: [`docs/DEMO.md`](docs/DEMO.md)
 
 ---
 
@@ -23,6 +25,25 @@ So the guiding principle is:
 
 > **If the supplied audio does not support an answer, the system says so
 > instead of guessing.**
+
+---
+
+## The collection
+
+The three supplied Fermi "Great Papers" episodes, transcribed by this system
+from the raw MP3s. Nothing is hard-coded — these are simply what was in
+`audio/` when `make ingest` last ran.
+
+| # | Episode | Length | Segments | Passages |
+|---|---|---|---|---|
+| 01 | Einstein's Special Relativity | 52:14 | 594 | 41 |
+| 09 | Bell's Theorem, 1964 | 34:00 | 399 | 26 |
+| 12 | The Dirac Equation and Antimatter, 1928 | 33:00 | 357 | 25 |
+| | **Total** | **1 h 59 m** | **1,350** | **92** |
+
+Transcribed in 41 m on CPU (~2.9× realtime). The audio itself is gitignored —
+it is not ours to redistribute — but every derived artefact is reproducible
+with `make ingest`.
 
 ---
 
@@ -115,7 +136,7 @@ to end. Replace them with the real episodes and re-run `make ingest`.
 Everything except answer generation still works:
 
 ```bash
-make search Q="ultraviolet catastrophe"    # hybrid retrieval, free
+make search Q="luminiferous aether"        # hybrid retrieval, free
 make eval-retrieval                        # full offline evaluation, free
 make test
 ```
@@ -141,15 +162,16 @@ make chat
 ```
 
 ```
-You: Why did Planck introduce the quantum idea?
-...answer with inline (Ep. "…" 12:30–13:10) citations...
+You: What bothered Einstein about the magnet and conductor example?
+...answer with inline (Ep. "…" 5:11–6:41) citations...
 
 Sources — verify these in the audio
-  • The Birth of the Quantum  2:34–3:44
+  • Great Papers 01 Einstein's Special Relativity  5:11–6:41
+  • Great Papers 01 Einstein's Special Relativity  6:28–7:45
 
 You: Explain that more simply.          ← follow-up, resolved from context
-You: How do these episodes differ on uncertainty?   ← cross-episode
-You: Take me to the part where they explain what a bit is.
+You: Which of these episodes mention CERN?          ← cross-episode
+You: Take me to the part where they explain the light clock.
 You: What do these episodes say about black holes?
     → "The supplied episodes don't cover this."
 ```
@@ -181,7 +203,7 @@ interface; the web UI exists for that one capability.
 
 ```bash
 curl -s localhost:8000/api/search -H 'Content-Type: application/json' \
-  -d '{"query":"ultraviolet catastrophe","top_k":3}'
+  -d '{"query":"luminiferous aether","top_k":3}'
 ```
 
 ---
@@ -195,19 +217,25 @@ make eval-compare     # baseline vs improved
 ```
 
 20 cases across 8 categories, run through the **real** agent — no
-evaluation-only code path, no hard-coded answers. Measured result of the one
-headline improvement:
+evaluation-only code path, no hard-coded answers.
+
+All numbers below were measured on the **three supplied Fermi episodes**
+(1 h 59 m of audio), transcribed by this system. Runs are committed under
+`eval/results/fermi_*`. The `eval/results/synthetic_*` runs are from the
+development fixture corpus used before the real audio arrived and are kept
+only for provenance — see `eval/results/README.md`.
 
 Offline (retrieval + refusal gate, no key, $0) — the measured effect of the one
 headline improvement:
 
 | Metric | Baseline | Improved | Δ |
 |---|---|---|---|
-| Pass rate | 75.0% | 85.0% | **+10.0%** |
-| Refusal accuracy | 0.0% | 50.0% | **+50.0%** |
-| False refusals | 0 | 0 | 0 |
-| Retrieval: episode hit | 100% | 100% | 0 |
-| Mean latency | 0.01 s | 0.57 s | +0.56 s |
+| Pass rate | 70.0% | 90.0% | **+20.0%** |
+| Refusal accuracy | 0.0% | 75.0% | **+75.0%** |
+| False refusals | 0 | 1 | +1 |
+| Retrieval: episode hit | 93.8% | 100% | +6.2% |
+| Retrieval: term coverage | 84.4% | 84.4% | 0 |
+| Mean latency | 0.01 s | 0.52 s | +0.51 s |
 
 Full pipeline (generation + LLM judge, via OpenRouter):
 
@@ -229,10 +257,11 @@ and the one real remaining hallucination: [`EVAL.md`](EVAL.md).
 ## How it works — the decisions that matter
 
 **ASR — faster-whisper `medium`, locally.** Free, private, and good enough that
-timestamps land within a second. `medium` on Apple silicon runs ~3× realtime,
-so three hours of audio takes about an hour, once. If the model can't load, the
-loader steps down (`medium → small → base → tiny`) and records which model
-actually ran in the transcript rather than failing.
+timestamps land within a second. Measured on the supplied episodes: 1 h 59 m of
+audio transcribed in 41 m on Apple silicon CPU — **~2.9× realtime**, 1,350
+segments. If the model can't load, the loader steps down
+(`medium → small → base → tiny`) and records which model actually ran in the
+transcript rather than failing.
 
 **Chunking — timestamp-aware, not character-based.** Chunks accumulate whole
 ASR segments and close when they hit ~75 s *and* land on sentence-final
@@ -241,9 +270,9 @@ boundary in the audio, which is what makes a citation's timestamps meaningful.
 15 s of overlap keeps an idea explained across a boundary retrievable.
 
 **Retrieval — hybrid, fused with RRF.** Dense embeddings find paraphrases
-("why energy comes in packets"); BM25 finds exact terminology ("ultraviolet
-catastrophe"). They are combined with Reciprocal Rank Fusion rather than a
-weighted score blend because cosine and BM25 scores live on different,
+("why a fast watch ticks slowly"); BM25 finds exact terminology
+("luminiferous aether"). They are combined with Reciprocal Rank Fusion rather
+than a weighted score blend because cosine and BM25 scores live on different,
 corpus-dependent scales — RRF consumes only ranks, so it needs no re-tuning
 when the audio changes.
 
@@ -295,12 +324,12 @@ key, two vendors, no extra setup.
 | Vector store (Chroma) + BM25 | local disk | **free** |
 | Offline evaluation | local | **free** |
 | Chat | API | ~$0.015 per turn (`anthropic/claude-sonnet-5`) |
-| Full evaluation (20 cases + judge) | API | **$0.27 per run** (measured) |
+| Full evaluation (20 cases + judge) | API | **$0.30 per run** (measured) |
 
 Ingestion, indexing, retrieval, refusal and the entire offline evaluation cost
 nothing. The API budget is spent only on generation and judging. OpenRouter
 reports the true cost of every call, and it is recorded per case in
-`eval/results/*/raw.jsonl` — the $0.27 above is measured, not estimated.
+`eval/results/*/raw.jsonl` — the $0.30 above is measured, not estimated.
 
 ---
 
@@ -324,8 +353,15 @@ All settings live in `.env` (see `.env.example`). The ones worth knowing:
 ## Project layout
 
 ```
-audio/                     supplied episodes (gitignored)
-data/                      generated artefacts — all reproducible
+README.md                  this file — setup, usage, results
+PRODUCT.md                 intended user, the problem, why this framing
+EVAL.md                    evaluation system, failures, measured improvement
+SERVICES_REQUIRED.md       every dependency, what needs a key, what it costs
+docs/DEMO.md               the 3-minute demo script
+Makefile                   every command in the project
+
+audio/                     supplied episodes (gitignored — not ours to ship)
+data/                      generated artefacts — all reproducible via make ingest
   transcripts/             our ASR output, .json + readable .txt
   chunks/                  timestamped passages
   index/                   Chroma + BM25 + the calibrated gate
@@ -338,13 +374,14 @@ src/companion/
   chat/                    agent, prompt, citations, session, providers
   interface/               cli.py, web.py + static UI
 eval/
-  cases.yaml               20 cases, 8 categories
+  cases.yaml               20 cases, 8 categories (written against the real audio)
   runner.py                drives the real pipeline
   checks.py                deterministic checks
   judge.py                 LLM-as-judge
   report.py                baseline vs improved
-  results/                 committed raw evidence
-tests/                     113 tests
+  results/fermi_*          final results, real Fermi episodes
+  results/synthetic_*      historical dev-corpus runs, kept for provenance
+tests/                     147 tests
 scripts/fixtures/          synthetic dev audio scripts
 ```
 
@@ -352,17 +389,20 @@ scripts/fixtures/          synthetic dev audio scripts
 
 ## Limitations
 
-- **One real hallucination remains.** In `followup_01` the model states Planck
-  "never succeeded" at something the transcript only says he "spent years
-  trying" — true, unsupported, and caught only by the judge. `EVAL.md` §9.2.
+- **ASR quality is a retrieval ceiling on proper nouns.** Whisper `medium`
+  transcribes "Michelson-Morley" as "Mickelson-Morley". Asking with the correct
+  spelling still returns the right passage first — the hyphen tokenises and
+  "Morley" still matches — but at roughly half the BM25 score. Names are where
+  ASR error quietly becomes retrieval error.
 - **Follow-up retrieval is weaker without an API key**, since query rewriting
   needs the LLM. `make eval-retrieval` deliberately makes no LLM call at all,
-  so its numbers are reproducible but pessimistic about follow-ups.
+  so its numbers are reproducible but pessimistic about follow-ups — this is
+  the single offline failure (`followup_03`), and it passes in the full run.
 - **The judge is unvalidated** against human labels, so treat its scores as a
   signal rather than a verdict.
-- **The committed numbers come from a 20-minute synthetic fixture corpus**, not
-  the Fermi episodes. Re-run `make ingest && make eval-baseline &&
-  make eval-improved` on the real audio to regenerate them.
+- **Full-pipeline results vary run to run.** Generation is non-deterministic,
+  and a borderline case can land either side of the line between runs. The
+  offline numbers are deterministic; the full numbers are one measured sample.
 - **Sessions are in-process.** Restarting the server clears conversations —
   multi-user infrastructure is an explicit non-goal.
 - **English-only** by default (`ASR_LANGUAGE=en`).

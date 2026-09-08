@@ -1,0 +1,13 @@
+{
+  "num_chunks": 92,
+  "embed_model": "BAAI/bge-small-en-v1.5",
+  "embed_dimension": 384,
+  "episodes": [
+    "great_papers_01_einstein_s_special_relativity",
+    "great_papers_09_bell_s_theorem_1964",
+    "great_papers_12_the_dirac_equation_and_antimatter_1928"
+  ],
+  "collection": "podcast_chunks",
+  "relevance_gate": -5.421,
+  "rerank_model": "cross-encoder/ms-marco-MiniLM-L-6-v2"
+}

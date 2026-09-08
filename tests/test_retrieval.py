@@ -50,10 +50,10 @@ def test_bm25_roundtrips_through_disk(chunks, tmp_path):
 @pytest.mark.parametrize(
     "query,expected",
     [
-        ("Take me to the part where they explain what a bit is.", "what a bit is"),
-        ("Explain the ultraviolet catastrophe simply", "the ultraviolet catastrophe"),
+        ("Take me to the part where they explain the light clock.", "the light clock"),
+        ("Explain the twin paradox simply", "the twin paradox"),
         ("What do these episodes say about superconductivity?", "superconductivity"),
-        ("What did Planck assume?", "What did Planck assume"),
+        ("What did Dirac assume?", "What did Dirac assume"),
     ],
 )
 def test_normalize_query_strips_wrappers(query, expected):
@@ -78,19 +78,19 @@ def retriever():
 
 def test_semantic_query_finds_the_right_episode(retriever):
     # Paraphrased, with none of the transcript's own wording — this can only
-    # be found semantically. The Shannon episode also discusses Planck's
-    # packets explicitly, so the assertion is that the quantum episode is
-    # retrieved, not that it necessarily ranks first.
-    result = retriever.retrieve("why energy comes in discrete packets")
+    # be found semantically. The Dirac episode also refers back to relativity,
+    # so the assertion is that the relativity episode is retrieved, not that
+    # it necessarily ranks first.
+    result = retriever.retrieve("why does a fast-moving watch tick more slowly")
     assert not result.is_empty
     episodes = {item.chunk.episode_id for item in result.chunks}
-    assert any(e.endswith("the_birth_of_the_quantum") for e in episodes)
+    assert any(e.endswith("einstein_s_special_relativity") for e in episodes)
 
 
 def test_exact_terminology_is_found(retriever):
-    result = retriever.retrieve("ultraviolet catastrophe")
+    result = retriever.retrieve("luminiferous aether")
     text = " ".join(item.chunk.text.lower() for item in result.chunks)
-    assert "ultraviolet catastrophe" in text
+    assert "luminiferous aether" in text
 
 
 def test_episode_filter_restricts_results(retriever):
@@ -101,8 +101,8 @@ def test_episode_filter_restricts_results(retriever):
 
 
 def test_compare_mode_spans_multiple_episodes(retriever):
-    default = retriever.retrieve("uncertainty and noise", mode="default")
-    compare = retriever.retrieve("uncertainty and noise", mode="compare")
+    default = retriever.retrieve("the speed of light as a limit", mode="default")
+    compare = retriever.retrieve("the speed of light as a limit", mode="compare")
     assert len(set(i.chunk.episode_id for i in compare.chunks)) >= len(
         set(i.chunk.episode_id for i in default.chunks)
     )
@@ -113,7 +113,7 @@ def test_retrieved_timestamps_are_within_the_episode(retriever):
     from companion.ingest.pipeline import load_episodes
 
     durations = {e.episode_id: e.duration for e in load_episodes()}
-    for item in retriever.retrieve("entropy", top_k=8).chunks:
+    for item in retriever.retrieve("relativity", top_k=8).chunks:
         assert 0 <= item.chunk.start < item.chunk.end
         assert item.chunk.end <= durations[item.chunk.episode_id] + 1.0
 
@@ -128,7 +128,7 @@ def test_unrelated_query_scores_below_the_calibrated_gate(retriever):
 def test_in_scope_query_scores_above_the_calibrated_gate(retriever):
     if retriever.relevance_gate is None:
         pytest.skip("reranker unavailable, so no calibrated gate")
-    result = retriever.retrieve("What did Planck assume about the oscillators?")
+    result = retriever.retrieve("What are Einstein's two postulates?")
     assert result.diagnostics["max_rerank_score"] > retriever.relevance_gate
 
 
