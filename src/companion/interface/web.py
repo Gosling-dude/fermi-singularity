@@ -13,7 +13,12 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    StreamingResponse,
+)
 from pydantic import BaseModel, Field
 
 from companion.chat.agent import CompanionAgent
@@ -21,6 +26,7 @@ from companion.chat.providers import provider_available
 from companion.chat.session import Session
 from companion.config import get_settings
 from companion.errors import CompanionError
+from companion.interface.audio_store import AudioUnavailable, fetch_range
 from companion.ingest.pipeline import load_episodes
 from companion.retrieve.retriever import get_retriever
 from companion.utils.logging import configure_logging, get_logger
@@ -126,13 +132,30 @@ def get_episode(episode_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/episodes/{episode_id}/audio")
-def episode_audio(episode_id: str) -> FileResponse:
-    """Serve the original audio so the player can seek into it."""
+def episode_audio(episode_id: str, request: Request):
+    """Serve the original audio so the player can seek into it.
+
+    Range requests are what make seeking work, and both backends preserve
+    them: ``FileResponse`` implements Range locally, and the S3 backend
+    forwards the header to the object store and relays its 206.
+    """
     settings = get_settings()
     episodes = {episode.episode_id: episode for episode in load_episodes()}
     episode = episodes.get(episode_id)
     if not episode:
         raise HTTPException(status_code=404, detail=f"no episode '{episode_id}'")
+
+    if settings.audio_backend == "s3":
+        try:
+            body, status, headers = fetch_range(
+                settings, episode.source_file, request.headers.get("range")
+            )
+        except AudioUnavailable as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return StreamingResponse(
+            body, status_code=status, media_type="audio/mpeg", headers=headers
+        )
+
     path = settings.audio_dir / episode.source_file
     if not path.exists():
         raise HTTPException(

@@ -74,11 +74,13 @@ COPY data/index ./data/index
 COPY data/chunks ./data/chunks
 COPY data/manifest.json ./data/manifest.json
 
-# Original audio, for in-browser seeking. Optional: if audio/ holds only its
-# README (the case when building from a clone, since the episodes are not
-# redistributable and stay out of git), the app still answers and cites — the
-# UI just reports that playback is unavailable.
-COPY audio ./audio
+# An empty audio/ directory. No podcast media is ever baked into a layer —
+# .dockerignore strips every media file, and an image can be pushed to a
+# registry and inspected. In production the browser's audio requests are
+# served from private object storage (AUDIO_BACKEND=s3), which keeps
+# Range/seek working without redistributing the MP3s. Created rather than
+# COPYd so the build cannot fail when the context has no audio at all.
+RUN mkdir -p /app/audio
 
 # Fail the build rather than ship a broken index.
 RUN python -c "\

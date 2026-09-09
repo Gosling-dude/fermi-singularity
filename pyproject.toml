@@ -19,6 +19,9 @@ dependencies = [
     "openai>=1.40.0",
     "numpy>=1.26.0",
     "httpx>=0.27.0",
+    # Only used to read episode audio from private S3-compatible storage
+    # (Cloudflare R2) when AUDIO_BACKEND=s3. Unused in the default local mode.
+    "boto3>=1.34.0",
 ]
 
 [project.optional-dependencies]

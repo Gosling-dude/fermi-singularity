@@ -24,9 +24,25 @@ services:
     healthCheckPath: /health
     autoDeploy: false
     envVars:
-      # The one secret. Set it in the Render dashboard; never commit it.
+      # Secrets. Set these in the Render dashboard; never commit them.
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+
+      # Episode audio is streamed from a PRIVATE Cloudflare R2 bucket, so the
+      # MP3s stay out of both this repository and the container image while
+      # citation click-to-seek keeps working (Range is forwarded to R2).
+      - key: AUDIO_BACKEND
+        value: s3
+      - key: AUDIO_S3_BUCKET
+        value: fermi-podcast-audio
+      - key: AUDIO_S3_ENDPOINT
+        value: https://f49ccb362bf31a5717fa4534e3a7a27b.r2.cloudflarestorage.com
+      - key: AUDIO_S3_REGION
+        value: auto
 
       # Providers and models (all already the code defaults; pinned here so
       # the deployment is explicit rather than implicit).
@@ -42,6 +58,9 @@ services:
       # Absolute paths matching the image layout.
       - key: DATA_DIR
         value: /app/data
+      # Unused while AUDIO_BACKEND=s3 (audio streams from R2 and the image
+      # ships an empty audio/). Kept so flipping back to AUDIO_BACKEND=local
+      # with a mounted volume works without editing this file.
       - key: AUDIO_DIR
         value: /app/audio
       - key: VECTOR_DB_PATH

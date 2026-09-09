@@ -34,6 +34,14 @@ data/transcripts
 # Evaluation evidence — not needed to serve, and the raw runs are bulky.
 eval/results
 
+# Episode audio is served from private object storage (AUDIO_BACKEND=s3), so
+# it must never enter an image layer — an image can be pushed to a registry
+# and inspected. audio/README.md is kept so the directory exists.
+audio/*.mp3
+audio/*.m4a
+audio/*.wav
+audio/*.flac
+
 # Dev-only material
 tests
 docs

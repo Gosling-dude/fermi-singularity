@@ -129,6 +129,23 @@ class Settings(BaseSettings):
     enable_query_rewrite: bool = Field(default=True, alias="ENABLE_QUERY_REWRITE")
     enable_compare_mode: bool = Field(default=True, alias="ENABLE_COMPARE_MODE")
 
+    # --- audio delivery ---------------------------------------------------
+    # Where the browser's audio requests are served from. "local" reads the
+    # file next to the app (the default, and how it has always worked).
+    # "s3" reads from private S3-compatible object storage, so a deployment
+    # can play audio without the MP3s ever entering git or the image.
+    audio_backend: Literal["local", "s3"] = Field(
+        default="local", alias="AUDIO_BACKEND"
+    )
+    audio_s3_bucket: str | None = Field(default=None, alias="AUDIO_S3_BUCKET")
+    audio_s3_endpoint: str | None = Field(default=None, alias="AUDIO_S3_ENDPOINT")
+    # R2 ignores the region but the SDK insists on one; "auto" is R2's value.
+    audio_s3_region: str = Field(default="auto", alias="AUDIO_S3_REGION")
+    aws_access_key_id: str | None = Field(default=None, alias="AWS_ACCESS_KEY_ID")
+    aws_secret_access_key: str | None = Field(
+        default=None, alias="AWS_SECRET_ACCESS_KEY"
+    )
+
     # --- paths ------------------------------------------------------------
     audio_dir: Path = Field(default=PROJECT_ROOT / "audio", alias="AUDIO_DIR")
     data_dir: Path = Field(default=PROJECT_ROOT / "data", alias="DATA_DIR")
@@ -168,6 +185,35 @@ class Settings(BaseSettings):
             self.vector_db_path,
         ):
             path.mkdir(parents=True, exist_ok=True)
+
+    @model_validator(mode="after")
+    def _s3_audio_is_fully_configured(self) -> "Settings":
+        """Fail at start-up, not on the first click of a citation.
+
+        With AUDIO_BACKEND=s3 and a missing secret the service would boot,
+        pass its health check, and only break when a learner tries to play
+        audio — the failure would surface in someone's browser rather than in
+        the deploy log. Checking here turns that into a refusal to start.
+        """
+        if self.audio_backend != "s3":
+            return self
+        missing = [
+            name
+            for name, value in (
+                ("AUDIO_S3_BUCKET", self.audio_s3_bucket),
+                ("AUDIO_S3_ENDPOINT", self.audio_s3_endpoint),
+                ("AWS_ACCESS_KEY_ID", self.aws_access_key_id),
+                ("AWS_SECRET_ACCESS_KEY", self.aws_secret_access_key),
+            )
+            if not value
+        ]
+        if missing:
+            raise ValueError(
+                "AUDIO_BACKEND=s3 requires " + ", ".join(missing)
+                + " — set them, or use AUDIO_BACKEND=local to read audio "
+                "from the audio/ directory"
+            )
+        return self
 
     def api_key_for(self, provider: str) -> str | None:
         return {

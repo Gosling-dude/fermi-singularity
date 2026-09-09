@@ -42,6 +42,9 @@ dist/
 # and excluding them would ship a silently broken index.
 !data/index/**/*.bin
 
+# Local CLI caches (wrangler stores the Cloudflare account id/email here)
+.wrangler/
+
 # OS / editors
 .DS_Store
 Thumbs.db
