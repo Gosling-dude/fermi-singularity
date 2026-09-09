@@ -70,10 +70,36 @@ def test_search_rejects_an_out_of_range_top_k(client):
 
 
 def test_audio_is_servable_for_seeking(client):
-    episode_id = client.get("/api/episodes").json()["episodes"][0]["episode_id"]
-    response = client.get(f"/api/episodes/{episode_id}/audio")
+    """Playback must advertise Range and honour it — that is what seeking is.
+
+    The episodes are not redistributable, so a clone has the index but no
+    media. Skip rather than fail in that case; when the audio *is* present
+    the assertions below are the ones that matter.
+    """
+    from companion.config import get_settings
+    from companion.ingest.pipeline import load_episodes
+
+    settings = get_settings()
+    episode = load_episodes(settings)[0]
+    if settings.audio_backend == "local":
+        if not (settings.audio_dir / episode.source_file).exists():
+            pytest.skip(
+                "no local audio — the episodes are not committed to the repo"
+            )
+
+    response = client.get(f"/api/episodes/{episode.episode_id}/audio")
     assert response.status_code == 200
     assert response.headers["content-type"] == "audio/mpeg"
+    # Without this header the browser will not attempt to seek at all.
+    assert response.headers.get("accept-ranges") == "bytes"
+
+    ranged = client.get(
+        f"/api/episodes/{episode.episode_id}/audio",
+        headers={"Range": "bytes=1024-2047"},
+    )
+    assert ranged.status_code == 206
+    assert ranged.headers["content-range"].startswith("bytes 1024-2047/")
+    assert len(ranged.content) == 1024
 
 
 def test_chat_without_a_key_is_a_clear_503(client):
