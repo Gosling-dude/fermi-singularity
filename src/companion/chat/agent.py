@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Iterator
 
 from companion.chat.citations import (
     Citation,
@@ -386,6 +386,134 @@ class CompanionAgent:
         )
         session.add(_turn_from(response))
         return response
+
+    def ask_stream(
+        self,
+        message: str,
+        session: Session | None = None,
+        *,
+        episode_id: str | None = None,
+        mode: str | None = None,
+    ) -> Iterator[str | ChatResponse]:
+        """Answer one message, yielding text as it is generated.
+
+        Yields answer deltas, then exactly one ``ChatResponse`` carrying the
+        validated citations, sources and timings. Every guard is identical to
+        ``ask``: the evidence gate still refuses before any model call, and
+        citations are still validated against the passages the model saw —
+        streaming changes when bytes leave, not what is allowed to be said.
+
+        A refusal yields no deltas at all, just the final response.
+        """
+        session = session or Session()
+        started = time.perf_counter()
+        message = (message or "").strip()
+        if not message:
+            yield ChatResponse(
+                answer="I didn't catch a question there — what would you like to know?",
+                question=message, retrieval_query=message, mode="default",
+                not_covered=False, latency_ms=0.0,
+            )
+            return
+
+        timings: dict[str, float] = {}
+        resolved_mode = mode or detect_mode(message)
+
+        mark = time.perf_counter()
+        retrieval_query, rewrite_llm = self.rewrite_query(message, session)
+        timings["rewrite_ms"] = (time.perf_counter() - mark) * 1000
+        timings["rewrite_llm_called"] = float(rewrite_llm is not None)
+        effective_episode = episode_id or session.episode_filter
+
+        mark = time.perf_counter()
+        retrieval = self.retriever.retrieve(
+            retrieval_query,
+            episode_id=effective_episode,
+            mode="compare" if resolved_mode == "compare" else "default",
+        )
+        timings["retrieval_ms"] = (time.perf_counter() - mark) * 1000
+        for key in ("dense_ms", "bm25_ms", "rrf_ms", "rerank_ms"):
+            if key in retrieval.diagnostics:
+                timings[key] = retrieval.diagnostics[key]
+
+        if self._below_evidence_threshold(retrieval):
+            timings["total_ms"] = (time.perf_counter() - started) * 1000
+            response = ChatResponse(
+                answer=NOT_COVERED_MESSAGE, question=message,
+                retrieval_query=retrieval_query, mode=resolved_mode,
+                not_covered=True, retrieval=retrieval, rewrite_llm=rewrite_llm,
+                latency_ms=timings["total_ms"], timings=timings,
+            )
+            _log_timings("refused (no LLM call)", timings)
+            session.add(_turn_from(response))
+            yield response
+            return
+
+        context_chunks = cap_context(
+            retrieval.chunks, self.settings.max_context_chars
+        )
+        user_turn = build_user_turn(
+            message, context_chunks, mode=resolved_mode,
+            retrieval_query=retrieval_query,
+        )
+        messages = [*session.history(limit=4), {"role": "user", "content": user_turn}]
+        timings["context_chars"] = float(
+            sum(len(c.chunk.text) for c in context_chunks)
+        )
+
+        mark = time.perf_counter()
+        llm: LLMResponse | None = None
+        emitted = 0
+        for event in self.provider.complete_stream(
+            SYSTEM_PROMPT, messages,
+            max_tokens=self.settings.chat_max_tokens,
+            effort=self.settings.chat_effort,
+        ):
+            if isinstance(event, LLMResponse):
+                llm = event
+                break
+            # The refusal marker is an internal signal, never shown. It only
+            # ever appears at the very start, so holding back the first chunk
+            # until it is longer than the marker is enough to keep it hidden
+            # without buffering the whole answer.
+            emitted += len(event)
+            if emitted <= len(NOT_COVERED_MARKER) + 2:
+                continue
+            yield event
+        timings["llm_ms"] = (time.perf_counter() - mark) * 1000
+
+        if llm is None:  # pragma: no cover - provider contract violation
+            raise ProviderError("The model stream ended without a response.")
+        timings["output_tokens"] = float(llm.output_tokens)
+
+        mark = time.perf_counter()
+        answer, not_covered = _strip_marker(llm.text)
+        citations = validate_citations(
+            extract_citations(answer), context_chunks, self.episodes
+        )
+        if any(not citation.valid for citation in citations):
+            answer = strip_invalid_citations(answer, citations)
+
+        response = ChatResponse(
+            answer=answer.strip(), question=message,
+            retrieval_query=retrieval_query, mode=resolved_mode,
+            not_covered=not_covered, citations=citations,
+            sources=[] if not_covered else format_sources(context_chunks, citations),
+            retrieval=retrieval, llm=llm, rewrite_llm=rewrite_llm,
+            latency_ms=(time.perf_counter() - started) * 1000, timings=timings,
+        )
+        timings["citations_ms"] = (time.perf_counter() - mark) * 1000
+        timings["total_ms"] = response.latency_ms
+        _log_timings("answered (streamed)", timings)
+        log.info(
+            "answered", mode=resolved_mode, not_covered=not_covered,
+            citations=len(citations),
+            citation_validity=round(response.citation_validity, 2),
+            model=llm.model, latency_ms=round(response.latency_ms, 1),
+            cost_usd=round(response.estimated_cost_usd, 5), streamed=True,
+        )
+        session.add(_turn_from(response))
+        yield response
 
     def _below_evidence_threshold(self, retrieval: RetrievalResult) -> bool:
         """True when retrieval is too weak to support any grounded answer.

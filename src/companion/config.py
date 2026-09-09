@@ -171,6 +171,17 @@ class Settings(BaseSettings):
         default=PROJECT_ROOT / "data" / "index", alias="VECTOR_DB_PATH"
     )
 
+    # Warming the models at start-up removes ~8s from the first question, but
+    # it also means peak memory is reached at boot. On an instance too small
+    # to hold the models, deferring makes the failure happen on a request
+    # rather than in a restart loop, which is easier to diagnose.
+    warm_models_on_startup: bool = Field(
+        default=True, alias="WARM_MODELS_ON_STARTUP"
+    )
+    # PyTorch spawns one thread per core by default. A small shared instance
+    # has little to gain from that and pays for it in per-thread arenas.
+    torch_threads: int = Field(default=1, alias="TORCH_THREADS")
+
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
     # --- derived paths ----------------------------------------------------

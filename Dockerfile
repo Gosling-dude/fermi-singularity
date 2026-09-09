@@ -52,10 +52,19 @@ ENV PYTHONUNBUFFERED=1 \
     # Bind where the platform can reach us. PORT is supplied by the platform.
     HOST=0.0.0.0 \
     PORT=8000 \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    TOKENIZERS_PARALLELISM=false \
+    MALLOC_ARENA_MAX=2 \
     # Absolute paths so nothing depends on the working directory.
     DATA_DIR=/app/data \
     AUDIO_DIR=/app/audio \
     VECTOR_DB_PATH=/app/data/index
+
+# On OMP/MKL/MALLOC_ARENA_MAX above: extra BLAS threads buy nothing on a
+# small shared instance and each carries an allocator arena, and glibc
+# otherwise keeps up to 8 arenas per core — both inflate RSS on a container
+# judged by its memory limit.
 
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /opt/hf /opt/hf
@@ -105,4 +114,9 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
 urllib.request.urlopen(f\"http://127.0.0.1:{os.getenv('PORT','8000')}/health\", timeout=4)"
 
 # Shell form so ${PORT} is expanded from the platform's environment.
-CMD ["sh", "-c", "exec uvicorn companion.interface.web:app --host 0.0.0.0 --port ${PORT:-8000} --log-level warning"]
+# Exactly one worker, stated explicitly. Each worker is a separate process
+# with its own copy of every model — two workers would double a footprint
+# that is already the binding constraint. Concurrency comes from async I/O
+# and the streaming endpoint's worker thread, not from extra processes.
+# No --reload: that runs a file watcher and a second process tree.
+CMD ["sh", "-c", "exec uvicorn companion.interface.web:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --log-level warning"]

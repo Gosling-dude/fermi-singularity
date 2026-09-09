@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-09T05:56:26.089692+00:00",
+  "timestamp": "2026-09-09T06:24:15.799584+00:00",
   "mode": "full",
   "num_cases": 20,
   "passed": 20,
@@ -25,7 +25,7 @@
   "retrieval": {
     "mean_episode_hit": 1.0,
     "mean_term_coverage": 0.9062,
-    "mean_top_score": 0.030323
+    "mean_top_score": 0.030382
   },
   "refusal": {
     "num_refusal_cases": 4,
@@ -33,11 +33,11 @@
     "false_refusals": 0
   },
   "latency": {
-    "mean_ms": 13222.8,
-    "max_ms": 78747.9
+    "mean_ms": 10260.7,
+    "max_ms": 23938.2
   },
   "cost": {
-    "estimated_usd": 0.299693
+    "estimated_usd": 0.300051
   },
   "per_category": {
     "factual": {
@@ -197,10 +197,10 @@
       "pass_rate": 1.0
     }
   },
-  "elapsed_seconds": 500.8,
+  "elapsed_seconds": 438.3,
   "citations": {
     "mean_validity": 1.0,
-    "total": 62,
+    "total": 55,
     "invalid": 0
   },
   "hallucination": {
@@ -210,8 +210,8 @@
   "judge": {
     "num_judged": 20,
     "judge_pass_rate": 1.0,
-    "mean_faithfulness": 4.9,
-    "mean_completeness": 4.65,
+    "mean_faithfulness": 4.85,
+    "mean_completeness": 4.8,
     "mean_citation_correctness": 5.0,
     "mean_refusal_correctness": 5.0,
     "mean_clarity": 5.0

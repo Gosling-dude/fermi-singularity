@@ -24,6 +24,7 @@ from functools import lru_cache
 from companion.config import Settings, get_settings
 from companion.models import RetrievedChunk
 from companion.utils.logging import get_logger
+from companion.utils.memory import log_rss
 
 log = get_logger("retrieval")
 
@@ -74,8 +75,11 @@ class Reranker:
     def __init__(self, model_name: str) -> None:
         from sentence_transformers import CrossEncoder
 
+        before = log_rss("before reranker load")
         log.info("loading reranker", model=model_name)
         self._model = CrossEncoder(model_name, device="cpu", max_length=512)
+        after = log_rss("after reranker load")
+        log.info("reranker memory", cost_mb=round(after - before, 1))
         self.name = model_name
 
     def score(self, query: str, chunks: list[RetrievedChunk]) -> list[float]:

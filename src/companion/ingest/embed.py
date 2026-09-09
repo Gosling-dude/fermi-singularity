@@ -15,6 +15,7 @@ from functools import lru_cache
 from companion.config import Settings, get_settings
 from companion.errors import ConfigError
 from companion.utils.logging import get_logger
+from companion.utils.memory import log_rss
 
 log = get_logger("ingest")
 
@@ -39,12 +40,21 @@ class LocalEmbedder(Embedder):
 
     def __init__(self, model_name: str) -> None:
         try:
+            import torch
+
+            # Cap intra-op threads before any model is built. On a small
+            # shared instance the extra threads buy nothing and each carries
+            # its own allocator arena.
+            threads = max(1, get_settings().torch_threads)
+            torch.set_num_threads(threads)
+
             from sentence_transformers import SentenceTransformer
         except ImportError as exc:  # pragma: no cover - declared dependency
             raise ConfigError(
                 "sentence-transformers is not installed.",
                 "Run `make setup`.",
             ) from exc
+        before = log_rss("before embedding model load")
         log.info("loading embedding model", model=model_name)
         try:
             self._model = SentenceTransformer(model_name, device="cpu")
@@ -54,6 +64,8 @@ class LocalEmbedder(Embedder):
                 "Check network access for the first download, or set "
                 "EMBED_MODEL to a model already in your HuggingFace cache.",
             ) from exc
+        after = log_rss("after embedding model load")
+        log.info("embedding model memory", cost_mb=round(after - before, 1))
         self.name = model_name
         # `get_embedding_dimension` is the current name; fall back for older
         # sentence-transformers releases.

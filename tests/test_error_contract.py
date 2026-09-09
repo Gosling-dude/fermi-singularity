@@ -48,7 +48,7 @@ def test_successful_response_is_json(client):
 def test_health_probe_is_json(client):
     response = client.get("/health")
     assert response.status_code == 200
-    assert json.loads(response.content) == {"status": "ok"}
+    assert json.loads(response.content) == {"status": "ok"}  # minimal by design
 
 
 # --- provider failure ------------------------------------------------------
@@ -145,3 +145,119 @@ def test_index_is_html_and_the_ui_never_parses_it(client):
     # Every fetch must go through the guard rather than .json() directly.
     assert ".then(r => r.json())" not in page
     assert "await res.json()" not in page
+
+
+# --- streaming -------------------------------------------------------------
+def _events(raw: str) -> list[tuple[str, dict]]:
+    """Parse an SSE body into (event, payload) pairs, ignoring keepalives."""
+    out = []
+    for block in raw.split("\n\n"):
+        block = block.strip()
+        if not block or block.startswith(":"):
+            continue
+        name = ""
+        data = ""
+        for line in block.split("\n"):
+            if line.startswith("event:"):
+                name = line[6:].strip()
+            elif line.startswith("data:"):
+                data += line[5:].strip()
+        out.append((name, json.loads(data)))     # every payload must be JSON
+    return out
+
+
+def test_stream_opens_with_a_start_event_before_any_model_work(client, monkeypatch):
+    """The first byte must not wait on generation — that is the whole point."""
+    from companion.chat import agent as agent_module
+
+    def one_delta(self, message, session=None, **kw):
+        from companion.chat.agent import ChatResponse
+
+        yield "hello "
+        yield "world"
+        yield ChatResponse(
+            answer="hello world", question=message, retrieval_query=message,
+            mode="default", not_covered=False,
+        )
+
+    monkeypatch.setattr(agent_module.CompanionAgent, "ask_stream", one_delta)
+    response = client.post("/api/chat/stream", json={"message": "hi"})
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+
+    events = _events(response.text)
+    assert events[0][0] == "start", "the stream must open immediately"
+    assert "session_id" in events[0][1]
+    assert [e[1]["text"] for e in events if e[0] == "delta"] == ["hello ", "world"]
+    done = [e[1] for e in events if e[0] == "done"]
+    assert len(done) == 1 and done[0]["answer"] == "hello world"
+
+
+def test_stream_reports_provider_failure_as_a_json_error_event(client, monkeypatch):
+    """A mid-stream failure must not emit a truncated or malformed body."""
+    from companion.chat import agent as agent_module
+
+    def boom(self, message, session=None, **kw):
+        yield "partial "
+        raise ProviderError("OpenRouter died mid-stream.", "Try again.")
+
+    monkeypatch.setattr(agent_module.CompanionAgent, "ask_stream", boom)
+    response = client.post("/api/chat/stream", json={"message": "hi"})
+    assert response.status_code == 200          # headers were already sent
+
+    events = _events(response.text)
+    kinds = [e[0] for e in events]
+    assert kinds[0] == "start" and "error" in kinds
+    err = [e[1] for e in events if e[0] == "error"][0]
+    assert err["error"] == "OpenRouter died mid-stream."
+    assert err["remedy"] == "Try again."
+    assert "done" not in kinds, "a failed turn must not look complete"
+
+
+def test_stream_reports_unexpected_errors_as_json_too(client, monkeypatch):
+    from companion.chat import agent as agent_module
+
+    def explode(self, message, session=None, **kw):
+        raise RuntimeError("nobody saw this coming")
+        yield  # pragma: no cover - unreachable, makes this a generator
+
+    monkeypatch.setattr(agent_module.CompanionAgent, "ask_stream", explode)
+    events = _events(client.post("/api/chat/stream", json={"message": "hi"}).text)
+    err = [e[1] for e in events if e[0] == "error"][0]
+    assert "RuntimeError" in err["detail"]
+    assert "Traceback" not in json.dumps(err)
+
+
+def test_stream_refusal_yields_no_text(client, monkeypatch):
+    """A refusal must reach the client as a final answer, not as deltas."""
+    from companion.chat import agent as agent_module
+    from companion.chat.agent import NOT_COVERED_MESSAGE, ChatResponse
+
+    def refuse(self, message, session=None, **kw):
+        yield ChatResponse(
+            answer=NOT_COVERED_MESSAGE, question=message,
+            retrieval_query=message, mode="default", not_covered=True,
+        )
+
+    monkeypatch.setattr(agent_module.CompanionAgent, "ask_stream", refuse)
+    events = _events(client.post("/api/chat/stream", json={"message": "x"}).text)
+    assert [e[0] for e in events] == ["start", "done"]
+    assert events[1][1]["not_covered"] is True
+    assert events[1][1]["citations"] == []
+
+
+def test_non_streaming_endpoint_still_works(client, monkeypatch):
+    """The JSON endpoint is kept for tests and API consumers."""
+    from companion.chat import agent as agent_module
+    from companion.chat.agent import ChatResponse
+
+    monkeypatch.setattr(
+        agent_module.CompanionAgent, "ask",
+        lambda self, m, s=None, **kw: ChatResponse(
+            answer="plain", question=m, retrieval_query=m,
+            mode="default", not_covered=False),
+    )
+    response = client.post("/api/chat", json={"message": "hi"})
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    assert json.loads(response.content)["answer"] == "plain"

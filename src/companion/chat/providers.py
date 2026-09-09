@@ -19,7 +19,7 @@ import json
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Iterator, Literal
 
 from companion.config import Settings, get_settings
 from companion.errors import ConfigError, ProviderError
@@ -108,6 +108,27 @@ class LLMProvider(ABC):
         temperature: float | None = None,
     ) -> LLMResponse:
         """Return one completion. Raises ``ProviderError`` on any failure."""
+
+    def complete_stream(
+        self,
+        system: str,
+        messages: list[dict[str, str]],
+        *,
+        max_tokens: int = 4000,
+        effort: str = "medium",
+    ) -> Iterator[str | LLMResponse]:
+        """Yield text deltas, then one final ``LLMResponse``.
+
+        Providers that cannot stream fall back to a single ``complete`` call,
+        so a caller never has to ask whether streaming is supported: it yields
+        the whole answer as one delta and then the response.
+        """
+        response = self.complete(
+            system, messages, max_tokens=max_tokens, effort=effort
+        )
+        if response.text:
+            yield response.text
+        yield response
 
     def complete_json(
         self,
@@ -479,6 +500,117 @@ class OpenRouterProvider(LLMProvider):
             stop_reason=choice.finish_reason,
             reported_cost_usd=_openrouter_cost(usage),
         )
+
+
+    def complete_stream(
+        self,
+        system: str,
+        messages: list[dict[str, str]],
+        *,
+        max_tokens: int = 4000,
+        effort: str = "medium",
+    ) -> Iterator[str | LLMResponse]:
+        """Stream deltas from OpenRouter, then the accounted response.
+
+        Streaming is what keeps a hosted deployment alive: bytes reach the
+        proxy within a second or two of the request instead of after the whole
+        answer is generated, so an idle-timeout can never fire mid-answer.
+        """
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "system", "content": system}, *messages],
+            "stream": True,
+            "stream_options": {"include_usage": True},
+            "extra_body": {"usage": {"include": True}},
+        }
+        if self.settings.openrouter_send_reasoning:
+            payload["extra_body"]["reasoning"] = {"effort": effort}
+
+        started = time.perf_counter()
+        parts: list[str] = []
+        usage = None
+        finish = None
+        model_used = self.model
+        try:
+            stream = self._client.chat.completions.create(**payload)
+            for event in stream:
+                usage = getattr(event, "usage", None) or usage
+                model_used = getattr(event, "model", None) or model_used
+                choices = getattr(event, "choices", None)
+                if not choices:
+                    # OpenRouter reports upstream failures as a body-level
+                    # error on an otherwise fine stream.
+                    err = getattr(event, "error", None)
+                    if err:
+                        raise ProviderError(
+                            f"OpenRouter failed mid-stream for "
+                            f"'{self.model}': {err}"
+                        )
+                    continue
+                choice = choices[0]
+                finish = getattr(choice, "finish_reason", None) or finish
+                delta = getattr(choice, "delta", None)
+                text = getattr(delta, "content", None) if delta else None
+                if text:
+                    parts.append(text)
+                    yield text
+        except ProviderError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - translated below
+            raise self._translate(exc) from exc
+
+        answer = "".join(parts)
+        if not answer.strip():
+            raise ProviderError(
+                f"OpenRouter streamed no content for '{self.model}'.",
+                "The upstream provider may be down; try another model with "
+                "`make models`.",
+            )
+        yield LLMResponse(
+            text=answer.strip(),
+            model=model_used,
+            provider=self.name,
+            input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            output_tokens=getattr(usage, "completion_tokens", 0) or 0,
+            latency_ms=(time.perf_counter() - started) * 1000,
+            stop_reason=finish,
+            reported_cost_usd=_openrouter_cost(usage),
+        )
+
+    def _translate(self, exc: Exception) -> Exception:
+        """Map an SDK exception onto the project's typed errors."""
+        sdk = self._sdk
+        if isinstance(exc, sdk.AuthenticationError):
+            return ConfigError(
+                "OpenRouter rejected the API key.",
+                "Check OPENROUTER_API_KEY in your .env.",
+            )
+        if isinstance(exc, sdk.NotFoundError):
+            return ConfigError(
+                f"OpenRouter does not have a model called '{self.model}'.",
+                "Run `make models` to list what your key can reach.",
+            )
+        if isinstance(exc, sdk.RateLimitError):
+            return ProviderError(
+                "OpenRouter rate limit or insufficient credits.",
+                "Check your credit balance at https://openrouter.ai/credits.",
+            )
+        if isinstance(exc, sdk.APITimeoutError):
+            return ProviderError(
+                f"OpenRouter request timed out after "
+                f"{self.settings.provider_timeout_seconds:.0f}s.",
+                "Re-run, or lower CHAT_MAX_TOKENS.",
+            )
+        if isinstance(exc, sdk.APIConnectionError):
+            return ProviderError(
+                "Could not reach OpenRouter.", "Check your network."
+            )
+        if isinstance(exc, sdk.APIStatusError):
+            return ProviderError(
+                f"OpenRouter API error ({exc.status_code})."
+            )
+        return ProviderError(f"OpenRouter call failed: {type(exc).__name__}: {exc}")
 
 
 def _openrouter_cost(usage: Any) -> float | None:

@@ -106,6 +106,72 @@ const fill = el => { document.getElementById('q').value = el.textContent; docume
 // throw a parse error that reads like a bug in this app rather than what it
 // is. Decide from the status and content-type first, and read the body as
 // text when it is not JSON so the real message can be shown.
+// Read an SSE response, rendering answer text as it arrives. Returns the
+// final payload, or null when an error event was rendered instead.
+async function consumeStream(res, pending) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '', answerEl = null, text = '', final = null, failed = null;
+
+  const flush = raw => {
+    const lines = raw.split('\n');
+    const ev = (lines.find(l => l.startsWith('event:')) || 'event: message').slice(6).trim();
+    const dataLine = lines.filter(l => l.startsWith('data:')).map(l => l.slice(5).trim()).join('');
+    if (!dataLine) return;
+    let payload;
+    try { payload = JSON.parse(dataLine); }
+    catch { failed = 'The server sent a malformed event.'; return; }
+    if (ev === 'delta') {
+      if (!answerEl) {
+        pending.innerHTML = '';
+        answerEl = document.createElement('div');
+        answerEl.className = 'body';
+        pending.appendChild(answerEl);
+      }
+      text += payload.text || '';
+      answerEl.textContent = text;
+      log.scrollTop = log.scrollHeight;
+    } else if (ev === 'done') {
+      final = payload;
+    } else if (ev === 'error') {
+      failed = payload.error || 'Request failed.';
+      if (payload.remedy) failed += ' — ' + payload.remedy;
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let i;
+    while ((i = buffer.indexOf('\n\n')) !== -1) {
+      flush(buffer.slice(0, i));
+      buffer = buffer.slice(i + 2);
+    }
+  }
+  if (buffer.trim()) flush(buffer);
+
+  if (failed) {
+    pending.remove();
+    const div = document.createElement('div');
+    div.className = 'msg';
+    div.innerHTML = `<div class="body notcovered">${esc(failed)}</div>`;
+    log.appendChild(div);
+    return null;
+  }
+  if (!final) {
+    pending.remove();
+    const div = document.createElement('div');
+    div.className = 'msg';
+    div.innerHTML = `<div class="body notcovered">${esc(
+      'The connection closed before the answer finished.' +
+      (text ? ' Partial text was discarded because its citations could not be verified.' : ''))}</div>`;
+    log.appendChild(div);
+    return null;
+  }
+  return final;
+}
+
 async function readJson(res) {
   const ctype = (res.headers.get('content-type') || '').toLowerCase();
   const raw = await res.text();
@@ -220,11 +286,21 @@ async function send(event) {
   log.scrollTop = log.scrollHeight;
 
   try {
-    const res = await fetch('/api/chat', {
+    const res = await fetch('/api/chat/stream', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, session_id: sessionId, episode_id: currentEpisode })
     });
-    const data = await readJson(res);
+    // Streaming keeps the connection producing bytes, so a proxy never sees
+    // an idle request. Fall back to the plain JSON endpoint if the stream is
+    // unavailable for any reason.
+    const ctype = (res.headers.get('content-type') || '').toLowerCase();
+    let data = null;
+    if (res.ok && ctype.includes('text/event-stream')) {
+      data = await consumeStream(res, pending);
+      if (!data) return;                    // an error was already rendered
+    } else {
+      data = await readJson(res);
+    }
     pending.remove();
     if (!res.ok) {
       const div = document.createElement('div');

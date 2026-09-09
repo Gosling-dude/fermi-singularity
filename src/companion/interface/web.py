@@ -9,6 +9,7 @@ interface.
 from __future__ import annotations
 
 import json
+import queue
 import threading
 import time
 import traceback
@@ -34,6 +35,7 @@ from companion.errors import CompanionError
 from companion.interface.audio_store import AudioUnavailable, fetch_range
 from companion.ingest.pipeline import load_episodes
 from companion.retrieve.retriever import get_retriever
+from companion.utils.memory import log_rss, rss_mb
 from companion.utils.logging import configure_logging, get_logger
 
 log = get_logger("web")
@@ -147,6 +149,12 @@ async def unhandled_error_handler(request: Request, exc: Exception) -> JSONRespo
 
 
 @app.on_event("startup")
+def _report_startup_memory() -> None:
+    """Baseline RSS before any model is touched."""
+    log_rss("startup (no models loaded)")
+
+
+@app.on_event("startup")
 def _warm_models() -> None:
     """Load the embedding and reranking models before serving traffic.
 
@@ -156,6 +164,10 @@ def _warm_models() -> None:
     where the platform's start-period already tolerates it. Failure is not
     fatal: the lazy path still works, it is just slow once.
     """
+    if not get_settings().warm_models_on_startup:
+        log.info("model warm-up disabled; models load on first use")
+        return
+
     def warm() -> None:
         try:
             started = time.perf_counter()
@@ -163,6 +175,7 @@ def _warm_models() -> None:
             log.info(
                 "models warmed", ms=round((time.perf_counter() - started) * 1000, 1)
             )
+            log_rss("after warm-up (all models loaded)")
         except Exception as exc:  # noqa: BLE001 - warm-up must never break the app
             log.warn("model warm-up skipped", error=f"{type(exc).__name__}: {exc}")
 
@@ -183,6 +196,17 @@ def liveness() -> dict[str, str]:
     return {"status": "ok"}
 
 
+def _models_loaded() -> dict[str, bool]:
+    """Which heavy models this process currently holds, without loading any."""
+    from companion.ingest import embed
+    from companion.retrieve import rerank
+
+    return {
+        "embedder": embed._build_cached.cache_info().currsize > 0,
+        "reranker": rerank._load_cached.cache_info().currsize > 0,
+    }
+
+
 @app.get("/api/health")
 def health() -> dict[str, Any]:
     settings = get_settings()
@@ -194,6 +218,8 @@ def health() -> dict[str, Any]:
         "chat_model": settings.chat_model,
         "chat_key_present": provider_available("chat", settings),
         "retrieval_mode": settings.retrieval_mode,
+        "rss_mb": round(rss_mb(), 1),
+        "models_loaded": _models_loaded(),
     }
 
 
@@ -282,6 +308,113 @@ def chat(request: ChatRequest) -> dict[str, Any]:
     payload = response.to_dict()
     payload["session_id"] = session.session_id
     return payload
+
+
+# How long the stream may go without emitting anything before a keepalive
+# comment is sent. Comfortably under any proxy idle timeout.
+HEARTBEAT_SECONDS = 3.0
+
+_DONE = object()
+
+
+def _sse(event: str, data: dict[str, Any]) -> str:
+    """One Server-Sent Event. Data is always JSON, including errors."""
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@app.post("/api/chat/stream")
+def chat_stream(request: ChatRequest) -> StreamingResponse:
+    """Stream an answer as Server-Sent Events.
+
+    Why this exists: a hosted deployment sits behind a proxy that gives up on
+    a request producing no bytes for too long, and a long answer can take
+    tens of seconds to generate. Holding the connection silent until the
+    whole answer exists puts the request at the mercy of that timeout. Here
+    the first event is sent before generation begins, and deltas flow as
+    they are produced, so the connection is never idle.
+
+    Grounding is unchanged — the evidence gate still refuses before any model
+    call, and citations are still validated against the passages the model
+    saw. Only the final `done` event carries citations, because they cannot
+    be validated until the answer is complete.
+
+    Every event's payload is JSON, including failures, so a client never has
+    to parse a half-written body.
+    """
+    settings = get_settings()
+    session = _session(request.session_id)
+    if request.episode_id is not None:
+        session.episode_filter = request.episode_id or None
+
+    def produce(out: "queue.Queue[Any]") -> None:
+        """Run the agent on a worker thread, pushing events onto a queue."""
+        try:
+            for event in get_agent().ask_stream(
+                request.message, session,
+                episode_id=session.episode_filter, mode=request.mode,
+            ):
+                out.put(event)
+        except CompanionError as exc:
+            log.warn("stream failed", error=exc.message)
+            out.put({"error": exc.message, "detail": exc.remedy,
+                     "remedy": exc.remedy})
+        except Exception as exc:  # noqa: BLE001 - must not break the stream
+            log.error(
+                "unhandled error in stream",
+                error=f"{type(exc).__name__}: {exc}",
+                traceback=traceback.format_exc(),
+            )
+            out.put({"error": "The server hit an unexpected error.",
+                     "detail": f"{type(exc).__name__}: {exc}"})
+        finally:
+            out.put(_DONE)
+
+    def events() -> Any:
+        # Sent immediately, before any model work: this is the byte that
+        # tells the proxy the response has begun.
+        yield _sse("start", {"session_id": session.session_id})
+        if not provider_available("chat", settings):
+            yield _sse("error", {
+                "error": f"No API key for CHAT_PROVIDER={settings.chat_provider}.",
+                "detail": "Add it to .env and restart. /api/search works without one.",
+            })
+            return
+
+        # The model can think for several seconds before the first token, and
+        # retrieval runs before that. A comment line every few seconds keeps
+        # the connection producing bytes throughout, so no proxy can call it
+        # idle. SSE comments are ignored by clients.
+        out: "queue.Queue[Any]" = queue.Queue()
+        worker = threading.Thread(
+            target=produce, args=(out,), name="chat-stream", daemon=True
+        )
+        worker.start()
+        while True:
+            try:
+                event = out.get(timeout=HEARTBEAT_SECONDS)
+            except queue.Empty:
+                yield ": keepalive\n\n"
+                continue
+            if event is _DONE:
+                break
+            if isinstance(event, str):
+                yield _sse("delta", {"text": event})
+            elif isinstance(event, dict):
+                yield _sse("error", event)
+            else:
+                payload = event.to_dict()
+                payload["session_id"] = session.session_id
+                yield _sse("done", payload)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",   # ask nginx-style proxies not to buffer
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.post("/api/locate")
