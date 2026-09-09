@@ -50,44 +50,61 @@ with `make ingest`.
 ## Architecture
 
 ```
-audio/*.mp3                    the supplied episodes — read-only, never modified
-      │
-      ▼
-  FFmpeg  ──────────────────►  16 kHz mono WAV        data/normalized/
-      │                        (SHA-256 keyed, idempotent)
-      ▼
-  faster-whisper (medium)  ─►  timestamped transcript  data/transcripts/
-      │                        our own ASR — no external captions, ever
-      ▼
-  timestamp-aware chunking ─►  ~75 s passages          data/chunks/
-      │                        split on sentence + time, 15 s overlap
-      ├──────────────┬───────────────────┐
-      ▼              ▼                   ▼
-  BGE embeddings   BM25            gate calibration
-      │              │             (negative probes)
-      ▼              ▼                   │
-   ChromaDB      rank-bm25               │          data/index/
-      │              │                   │
-      └──────┬───────┘                   │
-             ▼                           │
-   Reciprocal Rank Fusion                │
-             ▼                           │
-   cross-encoder rerank  ◄───────────────┘
-             │
-             ├──── relevance below the calibrated gate? ──► "not covered"
-             │                                              (no LLM call)
+ audio/*.mp3
+     │
+     ▼
+   FFmpeg
+     │
+     ▼
+16 kHz Mono WAV
+     │
+     ▼
+Faster-Whisper
+     │
+     ▼
+Timestamped Transcript
+     │
+     ▼
+Timestamp-Aware Chunking
+(~75s chunks, 15s overlap)
+     │
+     ├───────────────┐
+     ▼               ▼
+BGE Embeddings     BM25
+     │               │
+ChromaDB             │
+     │               │
+     └───────┬───────┘
              ▼
-        top-5 passages
-             │
-             ▼
-   LLM + grounding prompt   (Anthropic or OpenAI)
+      Hybrid Retrieval
              │
              ▼
-   citation validation  ──► citations that don't overlap a
-             │              retrieved passage are deleted
+         RRF Fusion
+             │
              ▼
-   answer + episode/timestamp sources ──► click to hear the audio
+    Cross-Encoder Reranker
+             │
+             ▼
+       Relevance Gate
+        /          \
+       ▼            ▼
+Not Covered       Top-5
+                    │
+                    ▼
+               Grounded LLM
+             (OpenAI/Anthropic)
+                    │
+                    ▼
+          Citation Validation
+                    │
+                    ▼
+       Answer + Episode + Timestamp
+                    │
+                    ▼
+             Click to Listen
+
 ```
+
 
 **The pipeline starts at raw MP3 and does its own ASR.** No YouTube captions,
 platform transcripts, caption APIs, or externally supplied transcripts are used
