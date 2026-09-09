@@ -103,6 +103,30 @@ def render_context(chunks: list[RetrievedChunk]) -> str:
     return "\n\n".join(blocks)
 
 
+def cap_context(
+    chunks: list[RetrievedChunk], max_chars: int
+) -> list[RetrievedChunk]:
+    """Drop the lowest-ranked passages until the context fits ``max_chars``.
+
+    Passages are dropped whole and from the end, so what remains is the
+    best-ranked evidence and every surviving passage is intact. A partial
+    passage would be worse than none: the model could cite a timestamp range
+    whose text it only half saw. The first passage is always kept, however
+    long, so a turn can never end up with no evidence at all.
+    """
+    if max_chars <= 0:
+        return chunks
+    kept: list[RetrievedChunk] = []
+    used = 0
+    for item in chunks:
+        size = len(item.chunk.text)
+        if kept and used + size > max_chars:
+            break
+        kept.append(item)
+        used += size
+    return kept
+
+
 def build_user_turn(
     question: str,
     chunks: list[RetrievedChunk],

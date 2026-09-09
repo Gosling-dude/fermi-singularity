@@ -9,10 +9,15 @@ interface.
 from __future__ import annotations
 
 import json
+import threading
+import time
+import traceback
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -74,14 +79,97 @@ class SearchRequest(BaseModel):
     episode_id: str | None = None
 
 
+# Every handler below returns the same JSON shape — {"error", "detail"} — so
+# the browser can parse any response without first guessing whether it is
+# JSON. Starlette's defaults do not: an unhandled exception yields a
+# plain-text "Internal Server Error" body, which is what made the UI report
+# "Unexpected token" instead of the real failure.
+
+
+def _problem(
+    status: int, error: str, detail: str = "", **extra: Any
+) -> JSONResponse:
+    """The single error shape returned by every endpoint."""
+    body: dict[str, Any] = {"error": error, "detail": detail}
+    body.update(extra)
+    return JSONResponse(status_code=status, content=body)
+
+
 @app.exception_handler(CompanionError)
 async def companion_error_handler(_: Request, exc: CompanionError) -> JSONResponse:
     """Surface an actionable message rather than a stack trace."""
-    log.warn("request failed", error=exc.message)
-    return JSONResponse(
-        status_code=503,
-        content={"error": exc.message, "remedy": exc.remedy},
+    log.warn("request failed", error=exc.message, remedy=exc.remedy)
+    return _problem(503, exc.message, exc.remedy, remedy=exc.remedy)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error_handler(
+    _: Request, exc: StarletteHTTPException
+) -> JSONResponse:
+    """404/405/etc. as JSON, including the ones Starlette raises itself."""
+    detail = exc.detail if isinstance(exc.detail, str) else ""
+    return _problem(exc.status_code, detail or "Request failed.", detail)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(
+    _: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """A malformed request body is a 422 with a readable message, not a list."""
+    first = (exc.errors() or [{}])[0]
+    where = ".".join(str(p) for p in first.get("loc", ()) if p != "body")
+    detail = f"{where}: {first.get('msg', 'invalid')}" if where else str(
+        first.get("msg", "invalid request")
     )
+    return _problem(422, "The request body was not valid.", detail)
+
+
+@app.exception_handler(Exception)
+async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """The backstop.
+
+    The full traceback goes to the server log, where it is useful; the client
+    gets JSON with the exception type but no internals. Without this, an
+    unexpected error reaches the browser as a plain-text body that
+    ``response.json()`` cannot parse.
+    """
+    log.error(
+        "unhandled error",
+        path=request.url.path,
+        error=f"{type(exc).__name__}: {exc}",
+        traceback=traceback.format_exc(),
+    )
+    return _problem(
+        500,
+        "The server hit an unexpected error.",
+        f"{type(exc).__name__}: {exc}",
+    )
+
+
+@app.on_event("startup")
+def _warm_models() -> None:
+    """Load the embedding and reranking models before serving traffic.
+
+    Both are lazily constructed on first use, which put ~8s of model loading
+    (far more on a small cloud instance) into whichever learner happened to
+    ask the first question. Doing it at start-up moves that cost to boot,
+    where the platform's start-period already tolerates it. Failure is not
+    fatal: the lazy path still works, it is just slow once.
+    """
+    def warm() -> None:
+        try:
+            started = time.perf_counter()
+            get_retriever().retrieve("warm up the embedding and reranking models")
+            log.info(
+                "models warmed", ms=round((time.perf_counter() - started) * 1000, 1)
+            )
+        except Exception as exc:  # noqa: BLE001 - warm-up must never break the app
+            log.warn("model warm-up skipped", error=f"{type(exc).__name__}: {exc}")
+
+    # On a background thread so /health answers immediately: a platform health
+    # check must not wait for ~17s of model loading (much longer on a small
+    # instance) before deciding the service is alive.
+    threading.Thread(target=warm, name="model-warmup", daemon=True).start()
 
 
 @app.get("/health")

@@ -31,6 +31,7 @@ from companion.chat.prompt import (
     SYSTEM_PROMPT,
     build_rewrite_turn,
     build_user_turn,
+    cap_context,
 )
 from companion.chat.providers import (
     LLMProvider,
@@ -87,6 +88,9 @@ class ChatResponse:
     llm: LLMResponse | None = None
     latency_ms: float = 0.0
     rewrite_llm: LLMResponse | None = None
+    # Per-stage wall-clock, in ms, so a slow turn can be attributed to a
+    # stage rather than guessed at.
+    timings: dict[str, float] = field(default_factory=dict)
 
     @property
     def citation_validity(self) -> float:
@@ -113,8 +117,31 @@ class ChatResponse:
             "llm": self.llm.as_dict() if self.llm else None,
             "rewrite_llm": self.rewrite_llm.as_dict() if self.rewrite_llm else None,
             "latency_ms": round(self.latency_ms, 1),
+            "timings": {k: round(v, 1) for k, v in self.timings.items()},
             "estimated_cost_usd": round(self.estimated_cost_usd, 6),
         }
+
+
+def _log_timings(label: str, timings: dict[str, float]) -> None:
+    """One line per turn attributing the wall clock to a stage.
+
+    Printed for every request so a slow turn is diagnosed from the log rather
+    than reproduced under a profiler.
+    """
+    order = [
+        "rewrite_ms", "dense_ms", "bm25_ms", "rrf_ms", "rerank_ms",
+        "retrieval_ms", "gate_ms", "prompt_build_ms", "llm_ms",
+        "citations_ms", "total_ms",
+    ]
+    parts = [f"{k[:-3]}={timings[k]:.0f}ms" for k in order if k in timings]
+    extra = []
+    if "rewrite_llm_called" in timings:
+        extra.append(f"rewrite_llm={'yes' if timings['rewrite_llm_called'] else 'no'}")
+    if "output_tokens" in timings:
+        extra.append(f"out_tok={timings['output_tokens']:.0f}")
+    if "context_chars" in timings:
+        extra.append(f"ctx_chars={timings['context_chars']:.0f}")
+    log.info("timings " + label, breakdown=" ".join(parts), **{"detail": " ".join(extra)})
 
 
 def detect_mode(message: str) -> str:
@@ -216,28 +243,42 @@ class CompanionAgent:
                 latency_ms=0.0,
             )
 
+        timings: dict[str, float] = {}
         resolved_mode = mode or detect_mode(message)
+
+        mark = time.perf_counter()
         retrieval_query, rewrite_llm = self.rewrite_query(
             message, session, offline=retrieval_only
         )
+        timings["rewrite_ms"] = (time.perf_counter() - mark) * 1000
+        timings["rewrite_llm_called"] = float(rewrite_llm is not None)
         effective_episode = episode_id or session.episode_filter
 
+        mark = time.perf_counter()
         retrieval = self.retriever.retrieve(
             retrieval_query,
             episode_id=effective_episode,
             mode="compare" if resolved_mode == "compare" else "default",
         )
+        timings["retrieval_ms"] = (time.perf_counter() - mark) * 1000
+        for key in ("dense_ms", "bm25_ms", "rrf_ms", "rerank_ms"):
+            if key in retrieval.diagnostics:
+                timings[key] = retrieval.diagnostics[key]
 
         # Evidence gate: refuse before calling the model when nothing
         # sufficiently relevant came back. This makes the refusal path cheap
         # and independent of whether the model chooses to comply.
-        if self._below_evidence_threshold(retrieval):
+        mark = time.perf_counter()
+        gated = self._below_evidence_threshold(retrieval)
+        timings["gate_ms"] = (time.perf_counter() - mark) * 1000
+        if gated:
             log.info(
                 "no sufficient evidence; refusing without an LLM call",
                 query=retrieval_query[:70],
                 top_score=round(retrieval.top_score, 4),
                 max_similarity=retrieval.diagnostics.get("max_dense_similarity"),
             )
+            timings["total_ms"] = (time.perf_counter() - started) * 1000
             response = ChatResponse(
                 answer=NOT_COVERED_MESSAGE,
                 question=message,
@@ -246,12 +287,15 @@ class CompanionAgent:
                 not_covered=True,
                 retrieval=retrieval,
                 rewrite_llm=rewrite_llm,
-                latency_ms=(time.perf_counter() - started) * 1000,
+                latency_ms=timings["total_ms"],
+                timings=timings,
             )
+            _log_timings("refused (no LLM call)", timings)
             session.add(_turn_from(response))
             return response
 
         if retrieval_only:
+            timings["total_ms"] = (time.perf_counter() - started) * 1000
             response = ChatResponse(
                 answer="",
                 question=message,
@@ -260,29 +304,49 @@ class CompanionAgent:
                 not_covered=False,
                 retrieval=retrieval,
                 rewrite_llm=rewrite_llm,
-                latency_ms=(time.perf_counter() - started) * 1000,
+                latency_ms=timings["total_ms"],
+                timings=timings,
             )
             session.add(_turn_from(response))
             return response
 
+        mark = time.perf_counter()
+        context_chunks = cap_context(
+            retrieval.chunks, self.settings.max_context_chars
+        )
+        if len(context_chunks) < len(retrieval.chunks):
+            log.info(
+                "context capped",
+                kept=len(context_chunks),
+                dropped=len(retrieval.chunks) - len(context_chunks),
+                limit=self.settings.max_context_chars,
+            )
         user_turn = build_user_turn(
             message,
-            retrieval.chunks,
+            context_chunks,
             mode=resolved_mode,
             retrieval_query=retrieval_query,
         )
         messages = [*session.history(limit=4), {"role": "user", "content": user_turn}]
+        timings["prompt_build_ms"] = (time.perf_counter() - mark) * 1000
+        timings["context_chars"] = float(
+            sum(len(c.chunk.text) for c in context_chunks)
+        )
 
+        mark = time.perf_counter()
         llm = self.provider.complete(
             SYSTEM_PROMPT,
             messages,
             max_tokens=self.settings.chat_max_tokens,
             effort=self.settings.chat_effort,
         )
+        timings["llm_ms"] = (time.perf_counter() - mark) * 1000
+        timings["output_tokens"] = float(llm.output_tokens)
 
+        mark = time.perf_counter()
         answer, not_covered = _strip_marker(llm.text)
         citations = validate_citations(
-            extract_citations(answer), retrieval.chunks, self.episodes
+            extract_citations(answer), context_chunks, self.episodes
         )
         if any(not citation.valid for citation in citations):
             invalid = [c for c in citations if not c.valid]
@@ -300,12 +364,16 @@ class CompanionAgent:
             mode=resolved_mode,
             not_covered=not_covered,
             citations=citations,
-            sources=[] if not_covered else format_sources(retrieval.chunks, citations),
+            sources=[] if not_covered else format_sources(context_chunks, citations),
             retrieval=retrieval,
             llm=llm,
             rewrite_llm=rewrite_llm,
             latency_ms=(time.perf_counter() - started) * 1000,
+            timings=timings,
         )
+        timings["citations_ms"] = (time.perf_counter() - mark) * 1000
+        timings["total_ms"] = response.latency_ms
+        _log_timings("answered", timings)
         log.info(
             "answered",
             mode=resolved_mode,

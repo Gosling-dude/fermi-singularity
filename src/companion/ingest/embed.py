@@ -8,6 +8,7 @@ getting that asymmetry right is worth a few points of retrieval quality.
 
 from __future__ import annotations
 
+import threading
 from abc import ABC, abstractmethod
 from functools import lru_cache
 
@@ -113,12 +114,22 @@ class OpenAIEmbedder(Embedder):
         return self._encode([text])[0]
 
 
+# Guarded because the web app warms models on a background thread; without
+# it a request arriving mid-warm-up would load a second copy of the model.
+_LOAD_LOCK = threading.Lock()
+
+
 @lru_cache(maxsize=2)
-def _build(provider: str, model: str) -> Embedder:
+def _build_cached(provider: str, model: str) -> Embedder:
     settings = get_settings()
     if provider == "openai":
         return OpenAIEmbedder(model, settings)
     return LocalEmbedder(model)
+
+
+def _build(provider: str, model: str) -> Embedder:
+    with _LOAD_LOCK:
+        return _build_cached(provider, model)
 
 
 def get_embedder(settings: Settings | None = None) -> Embedder:

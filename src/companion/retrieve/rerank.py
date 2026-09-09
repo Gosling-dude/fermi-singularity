@@ -18,6 +18,7 @@ grades the wrapper. Stripping the wrapper before scoring recovers the topic.
 from __future__ import annotations
 
 import re
+import threading
 from functools import lru_cache
 
 from companion.config import Settings, get_settings
@@ -84,9 +85,14 @@ class Reranker:
         return [float(score) for score in self._model.predict(pairs)]
 
 
+# Loading is guarded because start-up warms the models on a background
+# thread: without it, a request arriving mid-warm-up would miss the cache and
+# load a second copy of the model.
+_LOAD_LOCK = threading.Lock()
+
+
 @lru_cache(maxsize=1)
-def _load(model_name: str) -> Reranker | None:
-    """Load once. A failure degrades to no reranking rather than crashing."""
+def _load_cached(model_name: str) -> Reranker | None:
     try:
         return Reranker(model_name)
     except Exception as exc:  # noqa: BLE001 - degradation is deliberate
@@ -96,6 +102,11 @@ def _load(model_name: str) -> Reranker | None:
             error=f"{type(exc).__name__}: {exc}",
         )
         return None
+
+
+def _load(model_name: str) -> Reranker | None:
+    with _LOAD_LOCK:
+        return _load_cached(model_name)
 
 
 def get_reranker(settings: Settings | None = None) -> Reranker | None:

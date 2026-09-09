@@ -66,6 +66,16 @@ class Settings(BaseSettings):
     judge_effort: str = Field(default="medium", alias="JUDGE_EFFORT")
     judge_max_tokens: int = Field(default=4000, alias="JUDGE_MAX_TOKENS")
 
+    # --- provider transport ----------------------------------------------
+    # A single slow call used to be able to occupy 180s x 4 attempts, which is
+    # long enough for an upstream proxy to give up and return its own HTML
+    # error page — which the browser then failed to parse as JSON. Keep the
+    # envelope short enough that the server always answers first.
+    provider_timeout_seconds: float = Field(
+        default=60.0, alias="PROVIDER_TIMEOUT_SECONDS"
+    )
+    provider_max_retries: int = Field(default=1, alias="PROVIDER_MAX_RETRIES")
+
     # --- credentials ------------------------------------------------------
     openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
@@ -102,6 +112,14 @@ class Settings(BaseSettings):
     chunk_target_seconds: float = Field(default=75.0, alias="CHUNK_TARGET_SECONDS")
     chunk_max_seconds: float = Field(default=110.0, alias="CHUNK_MAX_SECONDS")
     chunk_overlap_seconds: float = Field(default=15.0, alias="CHUNK_OVERLAP_SECONDS")
+
+    # --- context bound ----------------------------------------------------
+    # A ceiling on transcript text sent to the model, in characters. Set well
+    # above normal use (~7k for five passages) so it never trims a real
+    # answer's evidence — it exists to bound a pathological turn, not to
+    # shrink context. Passages are dropped whole, lowest-ranked first, so a
+    # citation can never point at text the model was not shown.
+    max_context_chars: int = Field(default=16000, alias="MAX_CONTEXT_CHARS")
 
     # --- retrieval --------------------------------------------------------
     top_k: int = Field(default=5, alias="TOP_K")

@@ -187,10 +187,15 @@ class Retriever:
         top_k = top_k or settings.top_k
         started = time.perf_counter()
 
+        timings: dict[str, float] = {}
+
+        mark = time.perf_counter()
         dense = self._dense(query, settings.dense_k, episode_id)
+        timings["dense_ms"] = (time.perf_counter() - mark) * 1000
         dense_scores = dict(dense)
         dense_ranks = {cid: rank for rank, (cid, _) in enumerate(dense, start=1)}
 
+        mark = time.perf_counter()
         if settings.retrieval_mode == "hybrid":
             lexical = self._lexical(query, settings.bm25_k, episode_id)
         else:
@@ -198,9 +203,11 @@ class Retriever:
             # production code path with one flag flipped, not a separate
             # re-implementation.
             lexical = []
+        timings["bm25_ms"] = (time.perf_counter() - mark) * 1000
         bm25_scores = dict(lexical)
         bm25_ranks = {cid: rank for rank, (cid, _) in enumerate(lexical, start=1)}
 
+        mark = time.perf_counter()
         ranked_lists = [[cid for cid, _ in dense]]
         if lexical:
             ranked_lists.append([cid for cid, _ in lexical])
@@ -224,10 +231,15 @@ class Retriever:
             if cid in self._chunks
         ]
 
+        timings["rrf_ms"] = (time.perf_counter() - mark) * 1000
+
         # Rerank the fused pool with a cross-encoder. This both improves the
         # final ordering and produces the relevance score the evidence gate
         # uses to decide whether the collection supports an answer at all.
+        mark = time.perf_counter()
         candidates, best_relevance = rerank(query, candidates, settings)
+        timings["rerank_ms"] = (time.perf_counter() - mark) * 1000
+        timings["rerank_candidates"] = float(len(candidates))
 
         if mode == "compare" and settings.enable_compare_mode and not episode_id:
             selected = self._balance_across_episodes(candidates, top_k)
@@ -253,6 +265,7 @@ class Retriever:
                 ),
                 "rerank_enabled": best_relevance is not None,
                 "relevance_gate": self.relevance_gate,
+                **{k: round(v, 1) for k, v in timings.items()},
             },
         )
         log.info(

@@ -85,3 +85,32 @@ def test_single_short_segment_still_produces_a_chunk():
     chunks = chunk_transcript(_transcript(["Just one line."]), _settings())
     assert len(chunks) == 1
     assert chunks[0].text == "Just one line."
+
+
+# --- context capping -------------------------------------------------------
+def test_context_cap_drops_whole_passages_from_the_end(retrieved):
+    """A partial passage would let the model cite text it only half saw."""
+    from companion.chat.prompt import cap_context
+
+    total = sum(len(item.chunk.text) for item in retrieved)
+    kept = cap_context(retrieved, total)
+    assert kept == retrieved, "an ample budget must keep everything"
+
+    first_two = sum(len(item.chunk.text) for item in retrieved[:2])
+    kept = cap_context(retrieved, first_two)
+    assert kept == retrieved[:2]
+    assert all(k.chunk.text == o.chunk.text for k, o in zip(kept, retrieved))
+
+
+def test_context_cap_always_keeps_the_best_passage(retrieved):
+    """Even an absurd limit must not leave the model with no evidence."""
+    from companion.chat.prompt import cap_context
+
+    kept = cap_context(retrieved, 1)
+    assert len(kept) == 1 and kept[0] is retrieved[0]
+
+
+def test_context_cap_disabled_by_a_non_positive_limit(retrieved):
+    from companion.chat.prompt import cap_context
+
+    assert cap_context(retrieved, 0) == retrieved

@@ -186,7 +186,11 @@ class AnthropicProvider(LLMProvider):
                 "provider with CHAT_PROVIDER=openai.",
             )
         self._sdk = anthropic
-        self._client = anthropic.Anthropic(api_key=key, timeout=120.0, max_retries=3)
+        self._client = anthropic.Anthropic(
+            api_key=key,
+            timeout=settings.provider_timeout_seconds,
+            max_retries=settings.provider_max_retries,
+        )
 
     def complete(
         self,
@@ -276,7 +280,11 @@ class OpenAIProvider(LLMProvider):
                 "provider with CHAT_PROVIDER=anthropic.",
             )
         self._sdk = openai
-        self._client = openai.OpenAI(api_key=key, timeout=120.0, max_retries=3)
+        self._client = openai.OpenAI(
+            api_key=key,
+            timeout=settings.provider_timeout_seconds,
+            max_retries=settings.provider_max_retries,
+        )
 
     def complete(
         self,
@@ -373,8 +381,8 @@ class OpenRouterProvider(LLMProvider):
             api_key=key,
             base_url=settings.openrouter_base_url,
             default_headers=headers,
-            timeout=180.0,
-            max_retries=3,
+            timeout=settings.provider_timeout_seconds,
+            max_retries=settings.provider_max_retries,
         )
 
     def complete(
@@ -433,8 +441,10 @@ class OpenRouterProvider(LLMProvider):
             ) from exc
         except self._sdk.APITimeoutError as exc:
             raise ProviderError(
-                "OpenRouter request timed out after 180s.",
-                "Re-run, or lower CHAT_MAX_TOKENS.",
+                f"OpenRouter request timed out after "
+                f"{self.settings.provider_timeout_seconds:.0f}s.",
+                "Re-run, or lower CHAT_MAX_TOKENS / raise "
+                "PROVIDER_TIMEOUT_SECONDS.",
             ) from exc
         except self._sdk.APIConnectionError as exc:
             raise ProviderError(

@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-09-08T16:33:49.671524+00:00",
+  "timestamp": "2026-09-09T05:56:26.089692+00:00",
   "mode": "full",
   "num_cases": 20,
-  "passed": 19,
-  "pass_rate": 0.95,
+  "passed": 20,
+  "pass_rate": 1.0,
   "errors": 0,
   "config": {
     "retrieval_mode": "hybrid",
@@ -25,7 +25,7 @@
   "retrieval": {
     "mean_episode_hit": 1.0,
     "mean_term_coverage": 0.9062,
-    "mean_top_score": 0.030401
+    "mean_top_score": 0.030323
   },
   "refusal": {
     "num_refusal_cases": 4,
@@ -33,11 +33,11 @@
     "false_refusals": 0
   },
   "latency": {
-    "mean_ms": 11246.6,
-    "max_ms": 22458.0
+    "mean_ms": 13222.8,
+    "max_ms": 78747.9
   },
   "cost": {
-    "estimated_usd": 0.299481
+    "estimated_usd": 0.299693
   },
   "per_category": {
     "factual": {
@@ -69,11 +69,11 @@
     },
     "cross_episode": {
       "total": 3,
-      "passed": 2,
+      "passed": 3,
       "cases": [
         {
           "id": "cross_01",
-          "passed": false,
+          "passed": true,
           "failures": []
         },
         {
@@ -87,7 +87,7 @@
           "failures": []
         }
       ],
-      "pass_rate": 0.6667
+      "pass_rate": 1.0
     },
     "explanation": {
       "total": 2,
@@ -197,7 +197,7 @@
       "pass_rate": 1.0
     }
   },
-  "elapsed_seconds": 457.0,
+  "elapsed_seconds": 500.8,
   "citations": {
     "mean_validity": 1.0,
     "total": 62,
@@ -205,13 +205,13 @@
   },
   "hallucination": {
     "forbidden_claim_violations": 0,
-    "judge_unsupported_claims": 2
+    "judge_unsupported_claims": 3
   },
   "judge": {
     "num_judged": 20,
-    "judge_pass_rate": 0.95,
+    "judge_pass_rate": 1.0,
     "mean_faithfulness": 4.9,
-    "mean_completeness": 4.8,
+    "mean_completeness": 4.65,
     "mean_citation_correctness": 5.0,
     "mean_refusal_correctness": 5.0,
     "mean_clarity": 5.0
